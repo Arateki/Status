@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Infraestrutura do painel de disponibilidade Status da Arateki"
+Description: "Infraestrutura do painel de disponibilidade Status da Arateki (Cloudflare R2)"
 
 Parameters:
   AlertEmail1:
@@ -12,36 +12,26 @@ Parameters:
     Description: "Segundo e-mail para receber alertas de queda e volta (opcional)"
   BucketName:
     Type: String
-    Default: ""
-    Description: "Nome do bucket S3 ou R2 (opcional; se vazio cria bucket S3 automático)"
+    Default: "arateki-status"
+    Description: "Nome do bucket Cloudflare R2"
   R2EndpointUrl:
     Type: String
     Default: ""
-    Description: "Endpoint S3 do Cloudflare R2 (ex: https://<id>.r2.cloudflarestorage.com, opcional)"
+    Description: "Endpoint S3 do Cloudflare R2 (ex: https://<id>.r2.cloudflarestorage.com)"
   R2AccessKeyId:
     Type: String
     Default: ""
     NoEcho: true
-    Description: "Access Key ID do Cloudflare R2 (opcional)"
+    Description: "Access Key ID do Cloudflare R2"
   R2SecretAccessKey:
     Type: String
     Default: ""
     NoEcho: true
-    Description: "Secret Access Key do Cloudflare R2 (opcional)"
-  LambdaCodeBucket:
-    Type: String
-    Default: ""
-    Description: "Bucket S3 onde está o zip do código da Lambda (preenchido no deploy)"
-  LambdaCodeKey:
-    Type: String
-    Default: "checador.zip"
-    Description: "Chave S3 do zip do código da Lambda"
+    Description: "Secret Access Key do Cloudflare R2"
 
 Conditions:
   HasAlertEmail1: !Not [!Equals [!Ref AlertEmail1, ""]]
   HasAlertEmail2: !Not [!Equals [!Ref AlertEmail2, ""]]
-  CreateS3Bucket: !Equals [!Ref BucketName, ""]
-  HasCodeBucket: !Not [!Equals [!Ref LambdaCodeBucket, ""]]
 
 Resources:
   DynamoDBTable:
@@ -88,34 +78,6 @@ Resources:
       TopicArn: !Ref AlertTopic
       Endpoint: !Ref AlertEmail2
 
-  StatusBucket:
-    Type: AWS::S3::Bucket
-    Condition: CreateS3Bucket
-    Properties:
-      BucketName: !Sub "arateki-status-${AWS::AccountId}"
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        IgnorePublicAcls: true
-        BlockPublicPolicy: false
-        RestrictPublicBuckets: false
-      WebsiteConfiguration:
-        IndexDocument: index.html
-        ErrorDocument: index.html
-
-  StatusBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Condition: CreateS3Bucket
-    Properties:
-      Bucket: !Ref StatusBucket
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: PublicReadGetObject
-            Effect: Allow
-            Principal: "*"
-            Action: s3:GetObject
-            Resource: !Sub "arn:aws:s3:::${StatusBucket}/*"
-
   LambdaLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -148,23 +110,11 @@ Resources:
                 Action:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:Query
-                  - dynamodb:BatchWriteItem
                 Resource: !GetAtt DynamoDBTable.Arn
               - Effect: Allow
                 Action:
                   - sns:Publish
                 Resource: !Ref AlertTopic
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                  - s3:PutObjectAcl
-                Resource:
-                  - !If
-                    - CreateS3Bucket
-                    - !Sub "arn:aws:s3:::${StatusBucket}/*"
-                    - !Sub "arn:aws:s3:::${BucketName}/*"
 
   CheckerLambda:
     Type: AWS::Lambda::Function
@@ -185,8 +135,8 @@ Resources:
         Variables:
           TABLE_NAME: !Ref DynamoDBTable
           TOPIC_ARN: !Ref AlertTopic
-          BUCKET_NAME: !If [CreateS3Bucket, !Ref StatusBucket, !Ref BucketName]
-          S3_ENDPOINT_URL: !Ref R2EndpointUrl
+          BUCKET_NAME: !Ref BucketName
+          R2_ENDPOINT_URL: !Ref R2EndpointUrl
           R2_ACCESS_KEY_ID: !Ref R2AccessKeyId
           R2_SECRET_ACCESS_KEY: !Ref R2SecretAccessKey
 
@@ -232,11 +182,3 @@ Outputs:
   LambdaFunctionName:
     Description: "Nome da função Lambda checadora"
     Value: !Ref CheckerLambda
-  StatusBucketName:
-    Condition: CreateS3Bucket
-    Description: "Nome do bucket S3 onde a página e status.json são salvos"
-    Value: !Ref StatusBucket
-  StatusBucketWebsiteUrl:
-    Condition: CreateS3Bucket
-    Description: "URL do Website Hosting do Bucket S3"
-    Value: !GetAtt StatusBucket.WebsiteURL
