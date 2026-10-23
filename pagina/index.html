@@ -17,6 +17,7 @@
       --vermelho: #ef4444;
       --vermelho-bg: rgba(239, 68, 68, 0.12);
       --amarelo: #f59e0b;
+      --amarelo-bg: rgba(245, 158, 11, 0.12);
       --chart-bar: #38bdf8;
       --chart-bar-hover: #0284c7;
       --chart-bar-fail: #ef4444;
@@ -35,6 +36,7 @@
         --vermelho: #dc2626;
         --vermelho-bg: #fef2f2;
         --amarelo: #d97706;
+        --amarelo-bg: #fffbeb;
         --chart-bar: #0284c7;
         --chart-bar-hover: #0369a1;
         --chart-bar-fail: #dc2626;
@@ -66,7 +68,7 @@
     }
 
     header {
-      margin-bottom: 28px;
+      margin-bottom: 24px;
     }
 
     .header-top {
@@ -148,74 +150,266 @@
       box-shadow: 0 0 8px var(--amarelo);
     }
 
-    .cards-grid {
+    /* Linha compacta por serviço */
+    .services-list {
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 12px;
     }
 
-    .card {
+    .service-row {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 10px;
-      padding: 20px;
+      border-radius: 8px;
+      padding: 14px 18px;
       box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
-    .card-header {
+    .service-header {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
+      align-items: center;
       flex-wrap: wrap;
       gap: 8px;
+    }
+
+    .service-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .service-name {
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .service-name:hover {
+      text-decoration: underline;
+    }
+
+    .service-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      white-space: nowrap;
+    }
+
+    .service-badge.online {
+      background: var(--verde-bg);
+      color: var(--verde);
+    }
+
+    .service-badge.offline {
+      background: var(--vermelho-bg);
+      color: var(--vermelho);
+    }
+
+    .service-badge.indisponivel,
+    .card-badge.indisponivel {
+      background: var(--amarelo-bg);
+      color: var(--amarelo);
+      border: 1px solid var(--amarelo);
+    }
+
+    .service-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-left: auto;
+    }
+
+    .uptime-summary-90d {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .btn-detalhes {
+      background: rgba(125, 125, 125, 0.08);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 0.825rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-detalhes:hover, .btn-detalhes:focus {
+      background: var(--card-border);
+      border-color: var(--text-muted);
+      outline: none;
+    }
+
+    /* Barra de 90 dias */
+    .uptime-bar-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .uptime-bar {
+      display: flex;
+      gap: 2px;
+      height: 28px;
+      align-items: stretch;
+      width: 100%;
+    }
+
+    @media (max-width: 540px) {
+      .uptime-bar {
+        gap: 1px;
+        height: 22px;
+      }
+      .service-row {
+        padding: 12px 14px;
+      }
+      .service-actions {
+        width: 100%;
+        justify-content: space-between;
+        margin-top: 2px;
+      }
+    }
+
+    .bar-segment {
+      flex: 1 1 0;
+      min-width: 0;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+
+    .bar-segment:hover {
+      opacity: 0.8;
+      transform: scaleY(1.15);
+    }
+
+    .bar-segment.verde {
+      background: var(--verde);
+    }
+
+    .bar-segment.parcial {
+      background: var(--amarelo);
+    }
+
+    .bar-segment.queda {
+      background: var(--vermelho);
+    }
+
+    .bar-segment.sem_dados {
+      background: rgba(156, 163, 175, 0.22);
+    }
+
+    .uptime-bar-legend {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.725rem;
+      color: var(--text-muted);
+    }
+
+    /* Modal dialog */
+    .modal-dialog {
+      margin: auto;
+      padding: 0;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      background: var(--card-bg);
+      color: var(--text);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      max-width: 700px;
+      width: 92%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-dialog::backdrop {
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(3px);
+    }
+
+    .modal-content {
+      padding: 24px;
+    }
+
+    @media (max-width: 600px) {
+      .modal-content {
+        padding: 16px;
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: 16px;
       padding-bottom: 12px;
       border-bottom: 1px solid var(--card-border);
     }
 
-    .card-title {
+    .modal-title-wrap {
       display: flex;
       align-items: center;
       gap: 10px;
     }
 
-    .card-title a {
+    .modal-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+
+    .btn-fechar {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-fechar:hover, .btn-fechar:focus {
       color: var(--text);
-      text-decoration: none;
-      font-size: 1.2rem;
-      font-weight: 600;
+      background: var(--card-border);
+      outline: none;
     }
 
-    .card-title a:hover {
-      text-decoration: underline;
-    }
-
-    .card-badge {
-      font-size: 0.85rem;
-      font-weight: 600;
-      padding: 3px 10px;
-      border-radius: 9999px;
-    }
-
-    .card-badge.online {
-      background: var(--verde-bg);
-      color: var(--verde);
-    }
-
-    .card-badge.offline {
-      background: var(--vermelho-bg);
-      color: var(--vermelho);
-    }
-
-    .card-badge.indisponivel {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--amarelo);
-      border: 1px solid var(--amarelo);
-    }
-
-    .latency-info {
+    .modal-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
       font-size: 0.85rem;
       color: var(--text-muted);
+      margin-bottom: 18px;
+    }
+
+    .modal-meta a {
+      color: var(--chart-bar);
+      text-decoration: none;
+    }
+
+    .modal-meta a:hover {
+      text-decoration: underline;
     }
 
     .metrics-row {
@@ -331,14 +525,15 @@
       position: fixed;
       background: #1e293b;
       color: #f8fafc;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 0.75rem;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-size: 0.775rem;
       pointer-events: none;
       display: none;
-      z-index: 100;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
       border: 1px solid #334155;
+      white-space: nowrap;
     }
   </style>
 </head>
@@ -357,23 +552,42 @@
       </div>
     </header>
 
-    <main class="cards-grid" id="sistemas-container">
-      <!-- Cartões inseridos dinamicamente -->
+    <main id="sistemas-container" class="services-list" aria-live="polite">
+      <!-- Linhas compactas dos serviços injetadas dinamicamente -->
     </main>
 
     <footer>
-      <p id="ultima-atualizacao">Atualizado automaticamente a cada 60 segundos.</p>
+      <p id="ultima-atualizacao">Carregando dados de monitoramento...</p>
+      <p style="margin-top: 8px;">Monitorado a cada 1 minuto por verificação automatizada independente.</p>
     </footer>
   </div>
 
-  <div id="chart-tooltip" class="tooltip"></div>
+  <!-- Modal de Detalhes do Serviço -->
+  <dialog id="modal-detalhes" class="modal-dialog" aria-modal="true" aria-labelledby="modal-titulo">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="dot" id="modal-dot"></span>
+          <h2 id="modal-titulo" class="modal-title">Detalhes do Serviço</h2>
+        </div>
+        <button class="btn-fechar" id="btn-fechar-modal" onclick="fecharModal()" aria-label="Fechar janela de detalhes">✕</button>
+      </div>
+      <div id="modal-body">
+        <!-- Detalhes injetados via abrirModal() -->
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Tooltip flutuante global -->
+  <div id="tooltip" class="tooltip" role="tooltip"></div>
 
   <script>
-    const tooltip = document.getElementById('chart-tooltip');
+    let sistemasCarregados = [];
+    let elementoOrigemFoco = null;
 
-    function escapeHtml(str) {
-      if (str === null || str === undefined) return '';
-      return String(str)
+    function escapeHtml(texto) {
+      if (texto === null || texto === undefined) return '';
+      return String(texto)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -383,102 +597,206 @@
 
     function escapeUrl(url) {
       if (!url) return '#';
-      const u = String(url).trim();
-      if (u.startsWith('https://') || u.startsWith('http://')) {
-        return escapeHtml(u);
+      const limpo = String(url).trim();
+      if (/^https?:\/\//i.test(limpo)) {
+        return escapeHtml(limpo);
       }
       return '#';
     }
+
+    const MESES_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
     function formatarDataIso(isoStr) {
       if (!isoStr) return '-';
       try {
         const d = new Date(isoStr);
-        return d.toLocaleString('pt-BR', {
+        if (isNaN(d.getTime())) return isoStr;
+        return d.toLocaleDateString('pt-BR', {
           day: '2-digit',
-          month: '2-digit',
+          month: 'short',
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
         });
       } catch (e) {
         return isoStr;
       }
     }
 
-    function formatarHoraIso(isoStr) {
-      if (!isoStr) return '';
-      try {
-        const d = new Date(isoStr);
-        return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      } catch (e) {
-        return '';
+    function formatarDataDia(dataStr) {
+      if (!dataStr) return '';
+      const partes = dataStr.split('-');
+      if (partes.length === 3) {
+        const dia = parseInt(partes[2], 10);
+        const mesIndex = parseInt(partes[1], 10) - 1;
+        const mes = MESES_PT[mesIndex] || '';
+        return `${dia} de ${mes}`;
       }
+      return dataStr;
     }
 
     function renderizarGraficoSvg(baldes) {
       if (!baldes || baldes.length === 0) {
-        return '<svg class="chart-svg" viewBox="0 0 100 20"><text x="50" y="12" font-size="6" fill="#64748b" text-anchor="middle">Sem dados nas últimas 24h</text></svg>';
+        return '<div style="font-size:0.8rem; color:var(--text-muted); padding:8px 0;">Sem dados de latência para as últimas 24h</div>';
       }
 
       const totalBarras = 288;
-      const larguraTotal = 800;
+      const larguraBarra = 2;
+      const espacoBarra = 1;
+      const larguraTotal = totalBarras * (larguraBarra + espacoBarra);
       const altura = 64;
-      const padding = 1;
-      const larguraBarra = (larguraTotal / totalBarras) - padding;
 
-      let maxLatencia = 100;
+      let maxLat = 200;
       for (const b of baldes) {
-        if (b.latencia_ms && b.latencia_ms > maxLatencia) {
-          maxLatencia = b.latencia_ms;
+        if (b.latencia_ms && b.latencia_ms > maxLat) {
+          maxLat = b.latencia_ms;
         }
       }
-      maxLatencia = Math.min(Math.max(maxLatencia * 1.15, 100), 10000);
 
-      // Preenche os últimos pontos até 288 baldes
-      const baldesCompletos = [];
-      const faltantes = Math.max(0, totalBarras - baldes.length);
-      for (let i = 0; i < faltantes; i++) {
-        baldesCompletos.push(null);
-      }
-      for (const b of baldes) {
-        baldesCompletos.push(b);
-      }
+      const svgBarras = baldes.map((b, i) => {
+        const x = i * (larguraBarra + espacoBarra);
+        const lat = b.latencia_ms || 0;
+        const h = Math.max(4, Math.round((lat / maxLat) * (altura - 8)));
+        const y = altura - h;
+        const cor = b.ok ? 'var(--chart-bar)' : 'var(--chart-bar-fail)';
+        const d = b.inicio ? new Date(b.inicio) : null;
+        const horaTexto = d && !isNaN(d.getTime()) ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+        const tipTexto = escapeHtml(`${horaTexto}: ${lat} ms (${b.ok ? 'OK' : 'Falha'})`);
 
-      let svgBarras = '';
-      for (let i = 0; i < totalBarras; i++) {
-        const b = baldesCompletos[i];
-        const x = i * (larguraTotal / totalBarras);
-
-        if (!b) {
-          svgBarras += `<rect x="${x.toFixed(1)}" y="${altura - 6}" width="${larguraBarra.toFixed(1)}" height="6" fill="rgba(125,125,125,0.1)" rx="1"/>`;
-          continue;
-        }
-
-        const lat = b.latencia_ms || 10;
-        const alt = Math.max(4, Math.round((lat / maxLatencia) * (altura - 8)));
-        const y = altura - alt;
-        const cor = b.ok === false ? 'var(--chart-bar-fail)' : 'var(--chart-bar)';
-        const hora = formatarHoraIso(b.inicio);
-        const textoTip = `${hora} — ${b.ok === false ? 'Falha' : lat + ' ms'}`;
-
-        svgBarras += `<rect class="bar" x="${x.toFixed(1)}" y="${y}" width="${larguraBarra.toFixed(1)}" height="${alt}" fill="${cor}" rx="1" data-tip="${escapeHtml(textoTip)}" onmouseenter="mostrarTip(evt, this.getAttribute('data-tip'))" onmouseleave="esconderTip()"/>`;
-      }
+        return `<rect x="${x}" y="${y}" width="${larguraBarra}" height="${h}" fill="${cor}" rx="1" onmouseenter="mostrarTip(event, '${tipTexto}')" onmouseleave="esconderTip()"></rect>`;
+      }).join('');
 
       return `<svg class="chart-svg" viewBox="0 0 ${larguraTotal} ${altura}" preserveAspectRatio="none">${svgBarras}</svg>`;
     }
 
+    const tooltip = document.getElementById('tooltip');
+
     function mostrarTip(evt, texto) {
-      tooltip.innerText = texto || '';
+      if (!texto) return;
+      tooltip.innerText = texto;
       tooltip.style.display = 'block';
-      tooltip.style.left = (evt.clientX + 10) + 'px';
-      tooltip.style.top = (evt.clientY - 25) + 'px';
+      posicionarTip(evt);
+    }
+
+    function posicionarTip(evt) {
+      const rect = tooltip.getBoundingClientRect();
+      let left = evt.clientX + 10;
+      let top = evt.clientY - 30;
+
+      if (left + rect.width > window.innerWidth - 10) {
+        left = evt.clientX - rect.width - 10;
+      }
+      if (top < 10) {
+        top = evt.clientY + 20;
+      }
+
+      tooltip.style.left = left + 'px';
+      tooltip.style.top = top + 'px';
+    }
+
+    function mostrarTipSegmento(evt, dataStr, pctVal, minutosFora, statusVal) {
+      let texto = '';
+      const dataFmt = formatarDataDia(dataStr);
+
+      if (statusVal === 'sem_dados') {
+        texto = `${dataFmt}: Sem dados de monitoramento`;
+      } else if (statusVal === 'verde') {
+        texto = `${dataFmt}: 100.00% operacional • 0m fora`;
+      } else {
+        const pctNum = pctVal !== '' ? parseFloat(pctVal).toFixed(2) : '0.00';
+        texto = `${dataFmt}: ${pctNum}% disponível • ${minutosFora}m fora`;
+      }
+
+      mostrarTip(evt, texto);
     }
 
     function esconderTip() {
       tooltip.style.display = 'none';
     }
 
-    function criarCardSistema(sis) {
+    document.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('bar-segment') && !e.target.closest('rect')) {
+        esconderTip();
+      }
+    });
+
+    function gerarSegmentosHtml(dias90) {
+      if (!dias90 || dias90.length === 0) {
+        return '<div style="font-size:0.8rem; color:var(--text-muted);">Sem histórico diário disponível</div>';
+      }
+
+      return dias90.map(d => {
+        const pctStr = d.pct !== null && d.pct !== undefined ? String(d.pct) : '';
+        const dataEsc = escapeHtml(d.data);
+        const statusEsc = escapeHtml(d.status || 'sem_dados');
+        const minFora = parseInt(d.minutos_fora || 0, 10);
+
+        return `<div class="bar-segment ${statusEsc}"
+                     data-data="${dataEsc}"
+                     data-pct="${pctStr}"
+                     data-minutos="${minFora}"
+                     data-status="${statusEsc}"
+                     onmouseenter="mostrarTipSegmento(event, '${dataEsc}', '${pctStr}', ${minFora}, '${statusEsc}')"
+                     onmouseleave="esconderTip()"
+                     onclick="mostrarTipSegmento(event, '${dataEsc}', '${pctStr}', ${minFora}, '${statusEsc}')"></div>`;
+      }).join('');
+    }
+
+    function criarLinhaServico(sis) {
+      const isIndisponivel = sis.status === 'indisponivel' || Boolean(sis.verificacao_indisponivel);
+      const isOnline = sis.status === 'no_ar' && !isIndisponivel;
+      let badgeClasse = 'offline';
+      let badgeTexto = 'Fora do ar';
+
+      if (isIndisponivel) {
+        badgeClasse = 'indisponivel';
+        badgeTexto = 'Verificação indisponível';
+      } else if (isOnline) {
+        badgeClasse = 'online';
+        badgeTexto = 'Operacional';
+      }
+
+      const disp = sis.disponibilidade || {};
+      const d90 = disp.d90 !== undefined ? `${disp.d90.toFixed(2)}%` : '100.00%';
+      const sid = escapeHtml(sis.id);
+
+      return `
+        <article class="service-row" data-id="${sid}">
+          <div class="service-header">
+            <div class="service-info">
+              <span class="dot ${badgeClasse}"></span>
+              <a href="${escapeUrl(sis.url)}" target="_blank" rel="noopener noreferrer" class="service-name">${escapeHtml(sis.nome)}</a>
+              <span class="service-badge ${badgeClasse}">${badgeTexto}</span>
+            </div>
+            <div class="service-actions">
+              <span class="uptime-summary-90d" title="Disponibilidade acumulada nos últimos 90 dias">${d90}</span>
+              <button class="btn-detalhes" onclick="abrirModal('${sid}')" aria-label="Ver detalhes de ${escapeHtml(sis.nome)}">
+                Detalhes
+              </button>
+            </div>
+          </div>
+          <div class="uptime-bar-wrap">
+            <div class="uptime-bar" role="img" aria-label="Histórico de 90 dias de ${escapeHtml(sis.nome)}">
+              ${gerarSegmentosHtml(sis.dias_90)}
+            </div>
+            <div class="uptime-bar-legend">
+              <span>90 dias atrás</span>
+              <span>Hoje</span>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function abrirModal(sistemaId) {
+      const sis = sistemasCarregados.find(s => s.id === sistemaId);
+      if (!sis) return;
+
+      elementoOrigemFoco = document.activeElement;
+      const modal = document.getElementById('modal-detalhes');
+      const modalDot = document.getElementById('modal-dot');
+      const modalTitulo = document.getElementById('modal-titulo');
+      const modalBody = document.getElementById('modal-body');
+
       const isIndisponivel = sis.status === 'indisponivel' || Boolean(sis.verificacao_indisponivel);
       const isOnline = sis.status === 'no_ar' && !isIndisponivel;
       let badgeClasse = 'offline';
@@ -490,15 +808,19 @@
         badgeClasse = 'online';
         badgeTexto = 'Operacional';
       }
-      const latenciaTexto = sis.latencia_ms !== null && sis.latencia_ms !== undefined
-        ? `${sis.latencia_ms} ms`
-        : '-';
+
+      modalDot.className = 'dot ' + badgeClasse;
+      modalTitulo.innerText = sis.nome;
 
       const disp = sis.disponibilidade || {};
       const h24 = disp.h24 !== undefined ? `${disp.h24.toFixed(2)}%` : '100.00%';
       const d7 = disp.d7 !== undefined ? `${disp.d7.toFixed(2)}%` : '100.00%';
       const d30 = disp.d30 !== undefined ? `${disp.d30.toFixed(2)}%` : '100.00%';
       const d90 = disp.d90 !== undefined ? `${disp.d90.toFixed(2)}%` : '100.00%';
+
+      const latenciaTexto = sis.latencia_ms !== null && sis.latencia_ms !== undefined ? `${sis.latencia_ms} ms` : '-';
+      const codigoTexto = sis.codigo_http ? `HTTP ${sis.codigo_http}` : '-';
+      const checagemTexto = formatarDataIso(sis.ultima_checagem);
 
       const quedas = sis.quedas_recentes || [];
       let quedasHtml = '';
@@ -513,52 +835,103 @@
         `).join('');
       }
 
-      return `
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">
-              <span class="dot ${badgeClasse}"></span>
-              <a href="${escapeUrl(sis.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sis.nome)}</a>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span class="latency-info">${escapeHtml(latenciaTexto)}</span>
-              <span class="card-badge ${badgeClasse}">${badgeTexto}</span>
-            </div>
+      modalBody.innerHTML = `
+        <div class="modal-meta">
+          <div>
+            <a href="${escapeUrl(sis.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sis.url)} ↗</a>
+            <span style="margin: 0 8px;">•</span>
+            <span class="service-badge ${badgeClasse}">${badgeTexto}</span>
           </div>
-
-          <div class="metrics-row">
-            <div class="metric-box">
-              <div class="metric-label">Últimas 24h</div>
-              <div class="metric-value">${h24}</div>
-            </div>
-            <div class="metric-box">
-              <div class="metric-label">Últimos 7d</div>
-              <div class="metric-value">${d7}</div>
-            </div>
-            <div class="metric-box">
-              <div class="metric-label">Últimos 30d</div>
-              <div class="metric-value">${d30}</div>
-            </div>
-            <div class="metric-box">
-              <div class="metric-label">Últimos 90d</div>
-              <div class="metric-value">${d90}</div>
-            </div>
-          </div>
-
-          <div class="chart-container">
-            <div class="chart-header">
-              <span>Tempo de resposta (últimas 24h em baldes de 5 min)</span>
-              <span>24h atrás ➔ Agora</span>
-            </div>
-            ${renderizarGraficoSvg(sis.baldes_24h)}
-          </div>
-
-          <div class="incidents-section">
-            <div class="incidents-title">Quedas Recentes</div>
-            ${quedasHtml}
+          <div>
+            <span>Última checagem: ${escapeHtml(checagemTexto)}</span>
+            <span style="margin: 0 6px;">•</span>
+            <span>${escapeHtml(latenciaTexto)}</span>
+            <span style="margin: 0 6px;">•</span>
+            <span>${escapeHtml(codigoTexto)}</span>
           </div>
         </div>
+
+        <div class="metrics-row">
+          <div class="metric-box">
+            <div class="metric-label">Últimas 24h</div>
+            <div class="metric-value">${h24}</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Últimos 7d</div>
+            <div class="metric-value">${d7}</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Últimos 30d</div>
+            <div class="metric-value">${d30}</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Últimos 90d</div>
+            <div class="metric-value">${d90}</div>
+          </div>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <span>Tempo de resposta (últimas 24h em baldes de 5 min)</span>
+            <span>24h atrás ➔ Agora</span>
+          </div>
+          ${renderizarGraficoSvg(sis.baldes_24h)}
+        </div>
+
+        <div class="incidents-section">
+          <div class="incidents-title">Quedas Recentes (Últimos 90 dias)</div>
+          ${quedasHtml}
+        </div>
       `;
+
+      modal.showModal();
+    }
+
+    function fecharModal() {
+      const modal = document.getElementById('modal-detalhes');
+      if (modal.open) {
+        modal.close();
+      }
+      if (elementoOrigemFoco && typeof elementoOrigemFoco.focus === 'function') {
+        elementoOrigemFoco.focus();
+        elementoOrigemFoco = null;
+      }
+    }
+
+    // Fecha o modal ao clicar fora (no backdrop)
+    const modalElement = document.getElementById('modal-detalhes');
+    modalElement.addEventListener('click', (event) => {
+      const rect = modalElement.getBoundingClientRect();
+      const clicouFora = (
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      );
+      if (clicouFora) {
+        fecharModal();
+      }
+    });
+
+    modalElement.addEventListener('cancel', () => {
+      if (elementoOrigemFoco && typeof elementoOrigemFoco.focus === 'function') {
+        elementoOrigemFoco.focus();
+        elementoOrigemFoco = null;
+      }
+    });
+
+    function formatarTextoStatusGeral(sistemas) {
+      const instaveis = (sistemas || []).filter(s => s.status !== 'no_ar');
+      if (instaveis.length === 0) {
+        return 'Todos os sistemas estão operacionais';
+      }
+      if (instaveis.length === 1) {
+        return `Instabilidade em ${instaveis[0].nome}`;
+      }
+      if (instaveis.length === 2) {
+        return `Instabilidade em ${instaveis[0].nome} e ${instaveis[1].nome}`;
+      }
+      return `Instabilidade em ${instaveis.length} sistemas`;
     }
 
     async function carregarStatus() {
@@ -574,6 +947,7 @@
           throw new Error('HTTP ' + resp.status);
         }
         const dados = await resp.json();
+        sistemasCarregados = dados.sistemas || [];
 
         const agoraMs = Date.now();
         const geradoMs = dados.gerado_em ? new Date(dados.gerado_em).getTime() : 0;
@@ -588,12 +962,10 @@
           const isTudoOk = dados.status_geral === 'operacional';
           banner.className = 'status-banner ' + (isTudoOk ? 'operacional' : 'instabilidade');
           bannerDot.className = 'dot ' + (isTudoOk ? 'online' : 'offline');
-          bannerTexto.innerText = isTudoOk
-            ? 'Todos os sistemas estão operacionais'
-            : 'Instabilidade detectada em um ou mais sistemas';
+          bannerTexto.innerText = formatarTextoStatusGeral(dados.sistemas);
         }
 
-        container.innerHTML = dados.sistemas.map(criarCardSistema).join('');
+        container.innerHTML = sistemasCarregados.map(criarLinhaServico).join('');
 
         if (dados.gerado_em) {
           const d = new Date(dados.gerado_em);

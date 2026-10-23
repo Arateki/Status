@@ -50,6 +50,23 @@ class TestPagina(unittest.TestCase):
         self.assertIn(".card-badge.indisponivel", self.conteudo)
         self.assertIn(".dot.indisponivel", self.conteudo)
 
+    def test_modal_dialog_nativo_e_acessibilidade(self):
+        """A página deve utilizar elemento <dialog> nativo com fechamento por botão, Esc e clique fora."""
+        self.assertIn('<dialog id="modal-detalhes"', self.conteudo)
+        self.assertIn('aria-modal="true"', self.conteudo)
+        self.assertIn("showModal()", self.conteudo)
+        self.assertIn("fecharModal()", self.conteudo)
+        self.assertIn("btn-fechar", self.conteudo)
+        self.assertIn("clicouFora", self.conteudo)
+
+    def test_barra_90_dias_e_linha_compacta(self):
+        """A página deve renderizar a linha compacta com a barra de 90 segmentos e botão de detalhes."""
+        self.assertIn("service-row", self.conteudo)
+        self.assertIn("uptime-bar", self.conteudo)
+        self.assertIn("bar-segment", self.conteudo)
+        self.assertIn("btn-detalhes", self.conteudo)
+        self.assertIn("mostrarTipSegmento", self.conteudo)
+
 
 if __name__ == "__main__":
     unittest.main()
