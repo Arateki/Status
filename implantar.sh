@@ -142,7 +142,8 @@ echo "    Código da Lambda atualizado!"
 # 8. Publica a página web (index.html) no Cloudflare R2
 if [[ -n "$R2_ENDPOINT_URL" && -n "$R2_ACCESS_KEY_ID" && -n "$R2_SECRET_ACCESS_KEY" ]]; then
   echo "--> Publicando pagina/index.html no Cloudflare R2 ($BUCKET_NAME)..."
-  env AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" -u AWS_PROFILE \
+  env -u AWS_PROFILE -u AWS_SESSION_TOKEN AWS_REQUEST_CHECKSUM_CALCULATION=when_required \
+    AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
     "$AWS_CLI" s3 cp pagina/index.html "s3://$BUCKET_NAME/index.html" \
     --endpoint-url "$R2_ENDPOINT_URL" \
     --content-type "text/html; charset=utf-8" \
