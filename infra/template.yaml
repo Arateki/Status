@@ -40,8 +40,8 @@ Resources:
       TableName: arateki-status
       BillingMode: PROVISIONED
       ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
@@ -102,7 +102,6 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/arateki-status-checador:*"
@@ -110,6 +109,8 @@ Resources:
                 Action:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
                 Resource: !GetAtt DynamoDBTable.Arn
               - Effect: Allow
                 Action:
@@ -151,6 +152,9 @@ Resources:
             Principal:
               Service: scheduler.amazonaws.com
             Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref "AWS::AccountId"
       Policies:
         - PolicyName: invoke-lambda-policy
           PolicyDocument:
