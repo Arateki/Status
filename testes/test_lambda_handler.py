@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from checador.checker import ResultadoChecagem
 from checador.evaluator import EstadoSistema
 from checador.lambda_handler import handler
+from checador.storage import ErroLeituraDynamoDB
 
 
 class TestLambdaHandler(unittest.TestCase):
@@ -53,6 +54,34 @@ class TestLambdaHandler(unittest.TestCase):
         mock_salvar_estado.assert_called_once()
         mock_publicar_json.assert_called_once()
         mock_enviar_sns.assert_not_called()
+
+    @patch("checador.lambda_handler.publicar_status_json")
+    @patch("checador.lambda_handler.salvar_estado_e_checagem")
+    @patch("checador.lambda_handler.checar_todos")
+    @patch("checador.lambda_handler.carregar_estado_sistema")
+    def test_handler_aborta_se_leitura_dynamodb_falhar(
+        self,
+        mock_carregar_estado,
+        mock_checar_todos,
+        mock_salvar_estado,
+        mock_publicar_json,
+    ):
+        """Se o DynamoDB falhar na leitura, o handler aborta sem salvar nem publicar nada."""
+        mock_carregar_estado.side_effect = ErroLeituraDynamoDB("Falha no get_item")
+
+        evento = {}
+        contexto = MagicMock()
+
+        resposta = handler(evento, contexto)
+
+        self.assertEqual(resposta["statusCode"], 500)
+        corpo = json.loads(resposta["body"])
+        self.assertEqual(corpo["status"], "abortado_por_seguranca")
+
+        # Garante que o estado anterior não foi sobrescrito nem o status.json publicado
+        mock_checar_todos.assert_not_called()
+        mock_salvar_estado.assert_not_called()
+        mock_publicar_json.assert_not_called()
 
 
 if __name__ == "__main__":

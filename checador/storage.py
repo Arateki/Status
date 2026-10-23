@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 TTL_90_DIAS_SEGUNDOS = 90 * 86400
 
 
+class ErroLeituraDynamoDB(Exception):
+    """Lançada quando a leitura do DynamoDB falha."""
+    pass
+
+
 def obter_cliente_dynamodb():
     """Retorna cliente DynamoDB do boto3."""
     import boto3
@@ -26,16 +31,16 @@ def obter_cliente_s3(
     access_key_id: Optional[str] = None,
     secret_access_key: Optional[str] = None,
 ):
-    """Retorna cliente S3 do boto3 (compatível nativamente com AWS S3 e Cloudflare R2)."""
+    """Retorna cliente S3 do boto3 configurado para o Cloudflare R2."""
     import boto3
 
-    kwargs: dict[str, Any] = {}
-    ep = endpoint_url or os.environ.get("S3_ENDPOINT_URL")
-    if ep:
-        kwargs["endpoint_url"] = ep
-
+    ep = endpoint_url or os.environ.get("R2_ENDPOINT_URL") or os.environ.get("S3_ENDPOINT_URL")
     key = access_key_id or os.environ.get("R2_ACCESS_KEY_ID")
     secret = secret_access_key or os.environ.get("R2_SECRET_ACCESS_KEY")
+
+    kwargs: dict[str, Any] = {}
+    if ep:
+        kwargs["endpoint_url"] = ep
     if key and secret:
         kwargs["aws_access_key_id"] = key
         kwargs["aws_secret_access_key"] = secret
@@ -48,14 +53,21 @@ def carregar_estado_sistema(
     table_name: Optional[str] = None,
     dynamo_client: Optional[Any] = None,
 ) -> Optional[EstadoSistema]:
-    """Carrega o estado atual de um sistema a partir do DynamoDB."""
+    """Carrega o estado atual de um sistema a partir do DynamoDB.
+
+    Retorna:
+    - EstadoSistema se o item existe.
+    - None se o item não existe no banco (sistema novo/primeira checagem).
+
+    Lança:
+    - ErroLeituraDynamoDB se houver falha de rede ou de serviço.
+    """
     tabela = table_name or os.environ.get("TABLE_NAME", "arateki-status")
     if dynamo_client is None:
         try:
             dynamo_client = obter_cliente_dynamodb()
         except Exception as err:
-            logger.warning("Não foi possível conectar ao DynamoDB: %s", err)
-            return None
+            raise ErroLeituraDynamoDB(f"Não foi possível inicializar cliente DynamoDB: {err}") from err
 
     try:
         resp = dynamo_client.get_item(
@@ -66,15 +78,20 @@ def carregar_estado_sistema(
             },
             ConsistentRead=True,
         )
-        item = resp.get("Item")
-        if not item or "dados_json" not in item:
-            return None
+    except Exception as err:
+        logger.error("Erro ao ler estado do sistema %s no DynamoDB: %s", sistema_id, err)
+        raise ErroLeituraDynamoDB(f"Falha ao consultar estado de {sistema_id} no DynamoDB: {err}") from err
 
+    item = resp.get("Item")
+    if not item or "dados_json" not in item:
+        return None
+
+    try:
         dados = json.loads(item["dados_json"]["S"])
         return EstadoSistema.from_dict(dados)
     except Exception as err:
-        logger.error("Erro ao ler estado do sistema %s no DynamoDB: %s", sistema_id, err)
-        return None
+        logger.error("Erro ao decodificar dados_json do sistema %s: %s", sistema_id, err)
+        raise ErroLeituraDynamoDB(f"JSON corrompido no estado de {sistema_id}: {err}") from err
 
 
 def salvar_estado_e_checagem(

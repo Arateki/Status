@@ -8,8 +8,14 @@ from checador.evaluator import (
     EstadoSistema,
     atualizar_baldes_24h,
     atualizar_historico_dias,
+    calcular_porcentagens,
 )
-from checador.storage import construir_status_json
+from checador.storage import (
+    ErroLeituraDynamoDB,
+    carregar_estado_sistema,
+    construir_status_json,
+)
+from unittest.mock import MagicMock
 
 
 class TestStorageAndJson(unittest.TestCase):
@@ -96,6 +102,45 @@ class TestStorageAndJson(unittest.TestCase):
         # O dia de 115 dias atrás não deve estar presente
         dia_antigo = (agora - timedelta(days=115)).strftime("%Y-%m-%d")
         self.assertNotIn(dia_antigo, historico)
+
+    def test_baldes_24h_contagem_individual_de_ok_e_falhas(self):
+        """Um erro no balde de 5 min não zera todas as outras checagens do cálculo h24."""
+        agora = datetime(2026, 10, 23, 14, 0, 0, tzinfo=timezone.utc)
+        baldes = []
+
+        # 5 checagens no mesmo intervalo de 5 minutos: 4 OK e 1 Falha
+        for i in range(4):
+            ts = (agora + timedelta(seconds=i * 30)).isoformat()
+            baldes = atualizar_baldes_24h(baldes, ts, ok=True, latencia_ms=40)
+
+        ts_falha = (agora + timedelta(seconds=150)).isoformat()
+        baldes = atualizar_baldes_24h(baldes, ts_falha, ok=False, latencia_ms=None)
+
+        self.assertEqual(len(baldes), 1)
+        b = baldes[0]
+        self.assertEqual(b["total"], 5)
+        self.assertEqual(b["total_ok"], 4)
+        self.assertFalse(b["ok"], "O balde como um todo deve marcar que houve falha para o gráfico")
+
+        # No cálculo de porcentagem h24, a taxa deve ser 4/5 = 80.0%
+        pcts = calcular_porcentagens({}, baldes, timestamp_referencia=agora.isoformat())
+        self.assertEqual(pcts["h24"], 80.0)
+
+    def test_carregar_estado_falha_dynamodb_lanca_excecao(self):
+        """Erro na consulta ao DynamoDB lança ErroLeituraDynamoDB para não apagar dados."""
+        mock_client = MagicMock()
+        mock_client.get_item.side_effect = RuntimeError("Conexão recusada ao DynamoDB")
+
+        with self.assertRaises(ErroLeituraDynamoDB):
+            carregar_estado_sistema("arateki-site", table_name="arateki-status", dynamo_client=mock_client)
+
+    def test_carregar_estado_item_inexistente_retorna_none(self):
+        """Item que realmente não existe retorna None normalmente."""
+        mock_client = MagicMock()
+        mock_client.get_item.return_value = {}  # sem Item
+
+        res = carregar_estado_sistema("arateki-site", table_name="arateki-status", dynamo_client=mock_client)
+        self.assertIsNone(res)
 
 
 if __name__ == "__main__":

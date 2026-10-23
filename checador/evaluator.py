@@ -109,12 +109,14 @@ def atualizar_baldes_24h(
         # Atualiza o balde corrente
         b = novos_baldes[-1]
         qtd = b.get("total", 1)
+        qtd_ok = b.get("total_ok", qtd if b.get("ok", True) else 0)
         soma_lat = b.get("soma_latencia", b.get("latencia_ms", 0) * qtd)
         if latencia_ms is not None:
             soma_lat += latencia_ms
             b["soma_latencia"] = soma_lat
             b["latencia_ms"] = int(round(soma_lat / (qtd + 1)))
         b["total"] = qtd + 1
+        b["total_ok"] = qtd_ok + (1 if ok else 0)
         if not ok:
             b["ok"] = False
     else:
@@ -125,6 +127,7 @@ def atualizar_baldes_24h(
             "soma_latencia": latencia_ms or 0,
             "ok": ok,
             "total": 1,
+            "total_ok": 1 if ok else 0,
         })
 
     # Mantém apenas os últimos 288 baldes (24 horas = 288 * 5 min)
@@ -168,7 +171,7 @@ def calcular_porcentagens(
     # 24 Horas: calculado a partir dos baldes das últimas 24h
     if baldes_24h:
         total_24h = sum(b.get("total", 1) for b in baldes_24h)
-        total_ok_24h = sum(b.get("total", 1) for b in baldes_24h if b.get("ok", True))
+        total_ok_24h = sum(b.get("total_ok", b.get("total", 1) if b.get("ok", True) else 0) for b in baldes_24h)
         pct_24h = round((total_ok_24h / total_24h) * 100.0, 2) if total_24h > 0 else 100.0
     else:
         pct_24h = 100.0

@@ -10,6 +10,7 @@ from .config import carregar_sistemas
 from .evaluator import avaliar_checagem
 from .notifier import enviar_alerta_sns
 from .storage import (
+    ErroLeituraDynamoDB,
     carregar_estado_sistema,
     construir_status_json,
     publicar_status_json,
@@ -25,11 +26,21 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     sistemas = carregar_sistemas()
     logger.info("Iniciando checagem de %d sistemas...", len(sistemas))
 
-    # 1. Carrega estados anteriores do DynamoDB
+    # 1. Carrega estados anteriores do DynamoDB com salvaguarda
     estados_anteriores = {}
-    for s in sistemas:
-        sid = s["id"]
-        estados_anteriores[sid] = carregar_estado_sistema(sid)
+    try:
+        for s in sistemas:
+            sid = s["id"]
+            estados_anteriores[sid] = carregar_estado_sistema(sid)
+    except ErroLeituraDynamoDB as err:
+        logger.error("Abortando execução para preservar histórico existente: %s", err)
+        return {
+            "statusCode": 500,
+            "body": json.dumps({
+                "erro": str(err),
+                "status": "abortado_por_seguranca",
+            }),
+        }
 
     # 2. Executa checagens HTTP em paralelo
     resultados = checar_todos(sistemas)
