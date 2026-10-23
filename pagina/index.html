@@ -360,6 +360,25 @@
   <script>
     const tooltip = document.getElementById('chart-tooltip');
 
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function escapeUrl(url) {
+      if (!url) return '#';
+      const u = String(url).trim();
+      if (u.startsWith('https://') || u.startsWith('http://')) {
+        return escapeHtml(u);
+      }
+      return '#';
+    }
+
     function formatarDataIso(isoStr) {
       if (!isoStr) return '-';
       try {
@@ -431,14 +450,14 @@
         const hora = formatarHoraIso(b.inicio);
         const textoTip = `${hora} — ${b.ok === false ? 'Falha' : lat + ' ms'}`;
 
-        svgBarras += `<rect class="bar" x="${x.toFixed(1)}" y="${y}" width="${larguraBarra.toFixed(1)}" height="${alt}" fill="${cor}" rx="1" data-tip="${textoTip}" onmouseenter="mostrarTip(evt, '${textoTip}')" onmouseleave="esconderTip()"/>`;
+        svgBarras += `<rect class="bar" x="${x.toFixed(1)}" y="${y}" width="${larguraBarra.toFixed(1)}" height="${alt}" fill="${cor}" rx="1" data-tip="${escapeHtml(textoTip)}" onmouseenter="mostrarTip(evt, this.getAttribute('data-tip'))" onmouseleave="esconderTip()"/>`;
       }
 
       return `<svg class="chart-svg" viewBox="0 0 ${larguraTotal} ${altura}" preserveAspectRatio="none">${svgBarras}</svg>`;
     }
 
     function mostrarTip(evt, texto) {
-      tooltip.innerText = texto;
+      tooltip.innerText = texto || '';
       tooltip.style.display = 'block';
       tooltip.style.left = (evt.clientX + 10) + 'px';
       tooltip.style.top = (evt.clientY - 25) + 'px';
@@ -469,8 +488,8 @@
       } else {
         quedasHtml = quedas.slice(0, 5).map(q => `
           <div class="incident-item">
-            <span class="incident-time">${formatarDataIso(q.inicio)} (${q.duracao_texto || 'em andamento'})</span>
-            <span class="incident-reason">${q.motivo || 'Queda'}</span>
+            <span class="incident-time">${formatarDataIso(q.inicio)} (${escapeHtml(q.duracao_texto || 'em andamento')})</span>
+            <span class="incident-reason">${escapeHtml(q.motivo || 'Queda')}</span>
           </div>
         `).join('');
       }
@@ -480,10 +499,10 @@
           <div class="card-header">
             <div class="card-title">
               <span class="dot ${badgeClasse}"></span>
-              <a href="${sis.url}" target="_blank" rel="noopener noreferrer">${sis.nome}</a>
+              <a href="${escapeUrl(sis.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sis.nome)}</a>
             </div>
             <div style="display: flex; align-items: center; gap: 10px;">
-              <span class="latency-info">${latenciaTexto}</span>
+              <span class="latency-info">${escapeHtml(latenciaTexto)}</span>
               <span class="card-badge ${badgeClasse}">${badgeTexto}</span>
             </div>
           </div>
@@ -531,7 +550,7 @@
       const ultAtualizacao = document.getElementById('ultima-atualizacao');
 
       try {
-        const resp = await fetch('status.json', { cache: 'no-store' });
+        const resp = await fetch('status.json');
         if (!resp.ok) {
           throw new Error('HTTP ' + resp.status);
         }
