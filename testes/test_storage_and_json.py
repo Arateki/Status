@@ -11,9 +11,16 @@ from checador.evaluator import (
     calcular_porcentagens,
 )
 from checador.storage import (
+    ErroGravacaoDynamoDB,
     ErroLeituraDynamoDB,
+    ErroPublicacaoR2,
+    carregar_baldes_24h,
     carregar_estado_sistema,
+    confirmar_alerta_enviado,
     construir_status_json,
+    publicar_status_json,
+    salvar_balde_hora,
+    salvar_estado_e_checagem,
 )
 from unittest.mock import MagicMock
 
@@ -141,6 +148,104 @@ class TestStorageAndJson(unittest.TestCase):
 
         res = carregar_estado_sistema("arateki-site", table_name="arateki-status", dynamo_client=mock_client)
         self.assertIsNone(res)
+
+    def test_salvar_estado_compacto_sem_baldes_24h(self):
+        """O item STATE no DynamoDB não deve conter o campo volumoso baldes_24h."""
+        mock_client = MagicMock()
+        estado = EstadoSistema(
+            sistema_id="arateki-site",
+            status="no_ar",
+            baldes_24h=[{"inicio": "2026-10-23T14:00:00Z", "latencia_ms": 20, "ok": True}],
+            versao=1,
+        )
+        res_check = {"ok": True, "codigo_http": 200, "latencia_ms": 20, "timestamp": "2026-10-23T14:05:00Z"}
+
+        salvar_estado_e_checagem(estado, res_check, versao_esperada=0, dynamo_client=mock_client)
+
+        # Procura a chamada put_item para SK="STATE"
+        chamadas_put = mock_client.put_item.call_args_list
+        put_state = next(c for c in chamadas_put if c.kwargs["Item"]["SK"]["S"] == "STATE")
+        dados_json_salvos = json.loads(put_state.kwargs["Item"]["dados_json"]["S"])
+
+        self.assertNotIn("baldes_24h", dados_json_salvos, "baldes_24h deve ficar fora do item STATE regravado")
+        self.assertEqual(put_state.kwargs["ConditionExpression"], "attribute_not_exists(PK)")
+
+    def test_salvar_balde_hora_e_carregar_baldes_24h(self):
+        """Verifica a escrita dos baldes da hora corrente e a leitura agrupada das 24h."""
+        mock_client = MagicMock()
+        agora = datetime(2026, 10, 23, 15, 30, 0, tzinfo=timezone.utc)
+        agora_iso = agora.isoformat()
+
+        baldes = [
+            {"inicio": "2026-10-23T15:00:00+00:00", "latencia_ms": 25, "ok": True},
+            {"inicio": "2026-10-23T15:05:00+00:00", "latencia_ms": 30, "ok": True},
+        ]
+
+        salvar_balde_hora("arateki-site", agora_iso, baldes, dynamo_client=mock_client)
+
+        # Confere chamada put_item com SK HOUR#2026-10-23T15
+        mock_client.put_item.assert_called_once()
+        chamada = mock_client.put_item.call_args.kwargs
+        self.assertEqual(chamada["Item"]["SK"]["S"], "HOUR#2026-10-23T15")
+        self.assertIn("ttl", chamada["Item"])
+
+        # Agora testa consulta via Query
+        mock_client.query.return_value = {
+            "Items": [
+                {"baldes_json": {"S": json.dumps(baldes)}},
+            ]
+        }
+        baldes_lidos = carregar_baldes_24h("arateki-site", dynamo_client=mock_client, agora_dt=agora)
+        self.assertEqual(len(baldes_lidos), 2)
+        self.assertEqual(baldes_lidos[0]["inicio"], "2026-10-23T15:00:00+00:00")
+
+    def test_confirmar_alerta_enviado_atualiza_versao_e_limpa_pendencia(self):
+        """Confirmação de envio de alerta limpa alerta_pendente, atualiza ultimo_notificado e incrementa versao."""
+        mock_client = MagicMock()
+        estado = EstadoSistema(
+            sistema_id="arateki-site",
+            status="fora",
+            ultimo_notificado="no_ar",
+            alerta_pendente={"acao": "notificar_queda", "dados": {}},
+            versao=2,
+        )
+
+        confirmar_alerta_enviado(estado, dynamo_client=mock_client)
+
+        self.assertEqual(estado.ultimo_notificado, "fora")
+        self.assertIsNone(estado.alerta_pendente)
+        self.assertEqual(estado.versao, 3)
+
+        mock_client.put_item.assert_called_once()
+        kwargs = mock_client.put_item.call_args.kwargs
+        self.assertEqual(kwargs["ConditionExpression"], "attribute_not_exists(PK) OR versao = :v_ant")
+        self.assertEqual(kwargs["ExpressionAttributeValues"][":v_ant"]["N"], "2")
+
+    def test_publicar_status_json_lanca_excecao_em_erro(self):
+        """Falha no upload do status.json para o bucket lança ErroPublicacaoR2."""
+        mock_s3 = MagicMock()
+        mock_s3.put_object.side_effect = RuntimeError("Falha de rede R2")
+
+        with self.assertRaises(ErroPublicacaoR2):
+            publicar_status_json({"status_geral": "operacional"}, bucket_name="arateki-status", s3_client=mock_s3)
+
+    def test_cloudflare_403_gera_status_indisponivel(self):
+        """Se o checador for bloqueado pelo Cloudflare, o status do sistema fica 'indisponivel'."""
+        sistemas_cfg = [{"id": "keyflow-api", "nome": "API", "url": "https://api.arateki.com"}]
+        estados = {
+            "keyflow-api": EstadoSistema(
+                sistema_id="keyflow-api",
+                status="no_ar",
+                verificacao_indisponivel=True,
+            )
+        }
+
+        doc = construir_status_json(sistemas_cfg, estados)
+
+        self.assertEqual(doc["status_geral"], "instabilidade", "Deve acusar instabilidade se verificação estiver indisponível")
+        s = doc["sistemas"][0]
+        self.assertEqual(s["status"], "indisponivel")
+        self.assertTrue(s["verificacao_indisponivel"])
 
 
 if __name__ == "__main__":

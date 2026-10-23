@@ -65,6 +65,11 @@ class TestEvaluator(unittest.TestCase):
         self.assertEqual(dados2["sistema_id"], "arateki-site")
         self.assertEqual(dados2["motivo"], "HTTP 503")
 
+        # Simula entrega e confirmação do alerta SNS
+        self.assertEqual(estado2.ultimo_notificado, "no_ar", "Ainda não confirmado")
+        estado2.registrar_alerta_enviado()
+        self.assertEqual(estado2.ultimo_notificado, "fora", "Confirmado após SNS")
+
         # 3ª falha consecutiva (continua fora, mas NÃO renotifica)
         depois_iso = (self.agora + timedelta(minutes=2)).isoformat()
         res3 = ResultadoChecagem(
@@ -110,7 +115,10 @@ class TestEvaluator(unittest.TestCase):
 
         self.assertEqual(novo_estado.status, "no_ar", "Deve recuperar para no_ar com 1 checagem ok")
         self.assertEqual(novo_estado.falhas_consecutivas, 0)
-        self.assertEqual(novo_estado.ultimo_notificado, "no_ar")
+        self.assertEqual(novo_estado.alerta_pendente["acao"], ACAO_NOTIFICAR_VOLTA)
+        self.assertEqual(novo_estado.ultimo_notificado, "fora", "Permanece fora até confirmação do SNS")
+        novo_estado.registrar_alerta_enviado()
+        self.assertEqual(novo_estado.ultimo_notificado, "no_ar", "Atualizado após entrega confirmada")
         self.assertEqual(acao, ACAO_NOTIFICAR_VOLTA)
         self.assertIsNotNone(dados)
         self.assertIn("15m", dados["duracao_texto"])

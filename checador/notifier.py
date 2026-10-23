@@ -23,7 +23,15 @@ def enviar_alerta_sns(
         try:
             import boto3
 
-            sns_client = boto3.client("sns")
+            cfg = None
+            try:
+                from botocore.config import Config
+                cfg = Config(connect_timeout=3, read_timeout=5, retries={"max_attempts": 2})
+            except ImportError:
+                pass
+
+            kwargs: dict[str, Any] = {"config": cfg} if cfg else {}
+            sns_client = boto3.client("sns", **kwargs)
         except Exception as err:
             logger.error("Erro ao inicializar cliente SNS: %s", err)
             return False

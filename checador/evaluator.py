@@ -56,8 +56,11 @@ class EstadoSistema:
     ultimo_tempo_ms: Optional[int] = None
     queda_ativa: Optional[dict[str, Any]] = None  # {inicio, motivo}
     quedas_recentes: list[dict[str, Any]] = field(default_factory=list)
-    baldes_24h: list[dict[str, Any]] = field(default_factory=list)  # baldes de 5 min (máx 288)
+    baldes_24h: list[dict[str, Any]] = field(default_factory=list)  # baldes de 5 min (em memória / montado dos baldes por hora)
     historico_dias: dict[str, dict[str, int]] = field(default_factory=dict)  # "YYYY-MM-DD": {"total": X, "ok": Y}
+    versao: int = 1
+    alerta_pendente: Optional[dict[str, Any]] = None
+    verificacao_indisponivel: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EstadoSistema":
@@ -73,6 +76,9 @@ class EstadoSistema:
             quedas_recentes=list(data.get("quedas_recentes", [])),
             baldes_24h=list(data.get("baldes_24h", [])),
             historico_dias=dict(data.get("historico_dias", {})),
+            versao=int(data.get("versao", 1)),
+            alerta_pendente=data.get("alerta_pendente"),
+            verificacao_indisponivel=bool(data.get("verificacao_indisponivel", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -88,7 +94,26 @@ class EstadoSistema:
             "quedas_recentes": self.quedas_recentes,
             "baldes_24h": self.baldes_24h,
             "historico_dias": self.historico_dias,
+            "versao": self.versao,
+            "alerta_pendente": self.alerta_pendente,
+            "verificacao_indisponivel": self.verificacao_indisponivel,
         }
+
+    def to_state_dict(self) -> dict[str, Any]:
+        """Retorna o dicionário compacto para o item STATE no DynamoDB (sem os baldes de 24h)."""
+        d = self.to_dict()
+        d.pop("baldes_24h", None)
+        return d
+
+    def registrar_alerta_enviado(self) -> None:
+        """Confirma a entrega do alerta pendente e sincroniza ultimo_notificado."""
+        if self.alerta_pendente:
+            acao = self.alerta_pendente.get("acao")
+            if acao == ACAO_NOTIFICAR_QUEDA:
+                self.ultimo_notificado = "fora"
+            elif acao == ACAO_NOTIFICAR_VOLTA:
+                self.ultimo_notificado = "no_ar"
+            self.alerta_pendente = None
 
 
 def atualizar_baldes_24h(
@@ -215,6 +240,10 @@ def avaliar_checagem(
         if estado_anterior
         else EstadoSistema(sistema_id=resultado.sistema_id)
     )
+    if estado_anterior:
+        estado.versao = estado_anterior.versao + 1
+    else:
+        estado.versao = 1
 
     estado.ultima_checagem = resultado.timestamp
     estado.ultimo_codigo_http = resultado.codigo_http
@@ -222,9 +251,12 @@ def avaliar_checagem(
         estado.ultimo_tempo_ms = resultado.latencia_ms
 
     # Se foi erro do checador (ex: Cloudflare bloqueando robô genérico),
-    # não é falha do sistema vigiado. Mantém estado e contadores intactos.
+    # não é falha do sistema vigiado, mas indica verificação indisponível.
     if resultado.erro_checador:
+        estado.verificacao_indisponivel = True
         return estado, ACAO_NENHUMA, None
+
+    estado.verificacao_indisponivel = False
 
     # Atualiza baldes de 24h e histórico diário
     estado.baldes_24h = atualizar_baldes_24h(
@@ -267,8 +299,7 @@ def avaliar_checagem(
 
             # Dispara alerta de volta se já tinha notificado a queda
             if estado.ultimo_notificado == "fora":
-                estado.ultimo_notificado = "no_ar"
-                return estado, ACAO_NOTIFICAR_VOLTA, {
+                dados_volta = {
                     "sistema_id": resultado.sistema_id,
                     "nome": resultado.nome,
                     "url": resultado.url,
@@ -276,6 +307,15 @@ def avaliar_checagem(
                     "fim": resultado.timestamp,
                     "duracao_texto": formatar_duracao(duracao_seg),
                 }
+                estado.alerta_pendente = {
+                    "acao": ACAO_NOTIFICAR_VOLTA,
+                    "dados": dados_volta,
+                    "criado_em": resultado.timestamp,
+                }
+                # Não altera ultimo_notificado aqui; só é atualizado após persistência e envio
+                return estado, ACAO_NOTIFICAR_VOLTA, dados_volta
+            else:
+                estado.alerta_pendente = None
 
         return estado, ACAO_NENHUMA, None
 
@@ -297,10 +337,9 @@ def avaliar_checagem(
                 "motivo": motivo,
             }
 
-            # Se ainda não notificou queda, dispara
+            # Se ainda não notificou queda, prepara alerta pendente
             if estado.ultimo_notificado != "fora":
-                estado.ultimo_notificado = "fora"
-                return estado, ACAO_NOTIFICAR_QUEDA, {
+                dados_queda = {
                     "sistema_id": resultado.sistema_id,
                     "nome": resultado.nome,
                     "url": resultado.url,
@@ -308,10 +347,17 @@ def avaliar_checagem(
                     "motivo": motivo,
                     "codigo_http": resultado.codigo_http,
                 }
+                estado.alerta_pendente = {
+                    "acao": ACAO_NOTIFICAR_QUEDA,
+                    "dados": dados_queda,
+                    "criado_em": resultado.timestamp,
+                }
+                # Não altera ultimo_notificado aqui; só é atualizado após persistência e envio
+                return estado, ACAO_NOTIFICAR_QUEDA, dados_queda
 
             return estado, ACAO_NENHUMA, None
 
         else:
-            # Continua fora (> 2 falhas). Já notificado, não reenvia alerta a cada minuto.
+            # Continua fora (> 2 falhas). Já notificado ou pendente de envio; não dispara nova ação
             estado.status = "fora"
             return estado, ACAO_NENHUMA, None
