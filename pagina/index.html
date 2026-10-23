@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Status da Arateki</title>
+  <meta name="description" content="Painel de disponibilidade e monitoramento em tempo real dos serviços da Arateki.">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --verde: #10b981;
+      --verde-bg: rgba(16, 185, 129, 0.12);
+      --vermelho: #ef4444;
+      --vermelho-bg: rgba(239, 68, 68, 0.12);
+      --amarelo: #f59e0b;
+      --chart-bar: #38bdf8;
+      --chart-bar-hover: #0284c7;
+      --chart-bar-fail: #ef4444;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --card-border: #e2e8f0;
+        --text: #0f172a;
+        --text-muted: #64748b;
+        --verde: #059669;
+        --verde-bg: #ecfdf5;
+        --vermelho: #dc2626;
+        --vermelho-bg: #fef2f2;
+        --amarelo: #d97706;
+        --chart-bar: #0284c7;
+        --chart-bar-hover: #0369a1;
+        --chart-bar-fail: #dc2626;
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px 16px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 860px;
+    }
+
+    header {
+      margin-bottom: 28px;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .btn-refresh {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-refresh:hover {
+      background: var(--card-border);
+    }
+
+    .status-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1.05rem;
+      margin-bottom: 24px;
+    }
+
+    .status-banner.operacional {
+      background: var(--verde-bg);
+      color: var(--verde);
+      border: 1px solid var(--verde);
+    }
+
+    .status-banner.instabilidade {
+      background: var(--vermelho-bg);
+      color: var(--vermelho);
+      border: 1px solid var(--vermelho);
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .dot.online {
+      background: var(--verde);
+      box-shadow: 0 0 8px var(--verde);
+    }
+
+    .dot.offline {
+      background: var(--vermelho);
+      box-shadow: 0 0 8px var(--vermelho);
+    }
+
+    .cards-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-title a {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 1.2rem;
+      font-weight: 600;
+    }
+
+    .card-title a:hover {
+      text-decoration: underline;
+    }
+
+    .card-badge {
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 9999px;
+    }
+
+    .card-badge.online {
+      background: var(--verde-bg);
+      color: var(--verde);
+    }
+
+    .card-badge.offline {
+      background: var(--vermelho-bg);
+      color: var(--vermelho);
+    }
+
+    .latency-info {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 600px) {
+      .metrics-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .metric-box {
+      background: rgba(125, 125, 125, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .metric-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .chart-container {
+      margin-bottom: 20px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .chart-svg {
+      width: 100%;
+      height: 72px;
+      display: block;
+      background: rgba(125, 125, 125, 0.03);
+      border-radius: 6px;
+      padding: 4px;
+    }
+
+    .incidents-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    .incidents-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .incident-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.825rem;
+      padding: 6px 0;
+      border-bottom: 1px dashed var(--card-border);
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .incident-item:last-child {
+      border-bottom: none;
+    }
+
+    .incident-time {
+      color: var(--text-muted);
+    }
+
+    .incident-reason {
+      color: var(--vermelho);
+      font-weight: 500;
+    }
+
+    .no-incidents {
+      font-size: 0.85rem;
+      color: var(--verde);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    footer {
+      margin-top: 40px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .tooltip {
+      position: fixed;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      pointer-events: none;
+      display: none;
+      z-index: 100;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      border: 1px solid #334155;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-top">
+        <h1>Status da Arateki</h1>
+        <button class="btn-refresh" id="btn-refresh" onclick="carregarStatus()">
+          <span id="refresh-icon">↻</span> Atualizar
+        </button>
+      </div>
+      <div id="status-geral-banner" class="status-banner operacional">
+        <span class="dot online" id="banner-dot"></span>
+        <span id="banner-texto">Carregando status dos serviços...</span>
+      </div>
+    </header>
+
+    <main class="cards-grid" id="sistemas-container">
+      <!-- Cartões inseridos dinamicamente -->
+    </main>
+
+    <footer>
+      <p id="ultima-atualizacao">Atualizado automaticamente a cada 60 segundos.</p>
+    </footer>
+  </div>
+
+  <div id="chart-tooltip" class="tooltip"></div>
+
+  <script>
+    const tooltip = document.getElementById('chart-tooltip');
+
+    function formatarDataIso(isoStr) {
+      if (!isoStr) return '-';
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    function formatarHoraIso(isoStr) {
+      if (!isoStr) return '';
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function renderizarGraficoSvg(baldes) {
+      if (!baldes || baldes.length === 0) {
+        return '<svg class="chart-svg" viewBox="0 0 100 20"><text x="50" y="12" font-size="6" fill="#64748b" text-anchor="middle">Sem dados nas últimas 24h</text></svg>';
+      }
+
+      const totalBarras = 288;
+      const larguraTotal = 800;
+      const altura = 64;
+      const padding = 1;
+      const larguraBarra = (larguraTotal / totalBarras) - padding;
+
+      let maxLatencia = 100;
+      for (const b of baldes) {
+        if (b.latencia_ms && b.latencia_ms > maxLatencia) {
+          maxLatencia = b.latencia_ms;
+        }
+      }
+      maxLatencia = Math.min(Math.max(maxLatencia * 1.15, 100), 10000);
+
+      // Preenche os últimos pontos até 288 baldes
+      const baldesCompletos = [];
+      const faltantes = Math.max(0, totalBarras - baldes.length);
+      for (let i = 0; i < faltantes; i++) {
+        baldesCompletos.push(null);
+      }
+      for (const b of baldes) {
+        baldesCompletos.push(b);
+      }
+
+      let svgBarras = '';
+      for (let i = 0; i < totalBarras; i++) {
+        const b = baldesCompletos[i];
+        const x = i * (larguraTotal / totalBarras);
+
+        if (!b) {
+          svgBarras += `<rect x="${x.toFixed(1)}" y="${altura - 6}" width="${larguraBarra.toFixed(1)}" height="6" fill="rgba(125,125,125,0.1)" rx="1"/>`;
+          continue;
+        }
+
+        const lat = b.latencia_ms || 10;
+        const alt = Math.max(4, Math.round((lat / maxLatencia) * (altura - 8)));
+        const y = altura - alt;
+        const cor = b.ok === false ? 'var(--chart-bar-fail)' : 'var(--chart-bar)';
+        const hora = formatarHoraIso(b.inicio);
+        const textoTip = `${hora} — ${b.ok === false ? 'Falha' : lat + ' ms'}`;
+
+        svgBarras += `<rect class="bar" x="${x.toFixed(1)}" y="${y}" width="${larguraBarra.toFixed(1)}" height="${alt}" fill="${cor}" rx="1" data-tip="${textoTip}" onmouseenter="mostrarTip(evt, '${textoTip}')" onmouseleave="esconderTip()"/>`;
+      }
+
+      return `<svg class="chart-svg" viewBox="0 0 ${larguraTotal} ${altura}" preserveAspectRatio="none">${svgBarras}</svg>`;
+    }
+
+    function mostrarTip(evt, texto) {
+      tooltip.innerText = texto;
+      tooltip.style.display = 'block';
+      tooltip.style.left = (evt.clientX + 10) + 'px';
+      tooltip.style.top = (evt.clientY - 25) + 'px';
+    }
+
+    function esconderTip() {
+      tooltip.style.display = 'none';
+    }
+
+    function criarCardSistema(sis) {
+      const isOnline = sis.status === 'no_ar';
+      const badgeClasse = isOnline ? 'online' : 'offline';
+      const badgeTexto = isOnline ? 'Operacional' : 'Fora do ar';
+      const latenciaTexto = sis.latencia_ms !== null && sis.latencia_ms !== undefined
+        ? `${sis.latencia_ms} ms`
+        : '-';
+
+      const disp = sis.disponibilidade || {};
+      const h24 = disp.h24 !== undefined ? `${disp.h24.toFixed(2)}%` : '100.00%';
+      const d7 = disp.d7 !== undefined ? `${disp.d7.toFixed(2)}%` : '100.00%';
+      const d30 = disp.d30 !== undefined ? `${disp.d30.toFixed(2)}%` : '100.00%';
+      const d90 = disp.d90 !== undefined ? `${disp.d90.toFixed(2)}%` : '100.00%';
+
+      const quedas = sis.quedas_recentes || [];
+      let quedasHtml = '';
+      if (quedas.length === 0) {
+        quedasHtml = `<div class="no-incidents">✓ Nenhuma queda registrada nos últimos 90 dias</div>`;
+      } else {
+        quedasHtml = quedas.slice(0, 5).map(q => `
+          <div class="incident-item">
+            <span class="incident-time">${formatarDataIso(q.inicio)} (${q.duracao_texto || 'em andamento'})</span>
+            <span class="incident-reason">${q.motivo || 'Queda'}</span>
+          </div>
+        `).join('');
+      }
+
+      return `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="dot ${badgeClasse}"></span>
+              <a href="${sis.url}" target="_blank" rel="noopener noreferrer">${sis.nome}</a>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="latency-info">${latenciaTexto}</span>
+              <span class="card-badge ${badgeClasse}">${badgeTexto}</span>
+            </div>
+          </div>
+
+          <div class="metrics-row">
+            <div class="metric-box">
+              <div class="metric-label">Últimas 24h</div>
+              <div class="metric-value">${h24}</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Últimos 7d</div>
+              <div class="metric-value">${d7}</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Últimos 30d</div>
+              <div class="metric-value">${d30}</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Últimos 90d</div>
+              <div class="metric-value">${d90}</div>
+            </div>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-header">
+              <span>Tempo de resposta (últimas 24h em baldes de 5 min)</span>
+              <span>24h atrás ➔ Agora</span>
+            </div>
+            ${renderizarGraficoSvg(sis.baldes_24h)}
+          </div>
+
+          <div class="incidents-section">
+            <div class="incidents-title">Quedas Recentes</div>
+            ${quedasHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    async function carregarStatus() {
+      const banner = document.getElementById('status-geral-banner');
+      const bannerDot = document.getElementById('banner-dot');
+      const bannerTexto = document.getElementById('banner-texto');
+      const container = document.getElementById('sistemas-container');
+      const ultAtualizacao = document.getElementById('ultima-atualizacao');
+
+      try {
+        const resp = await fetch('status.json', { cache: 'no-store' });
+        if (!resp.ok) {
+          throw new Error('HTTP ' + resp.status);
+        }
+        const dados = await resp.json();
+
+        const isTudoOk = dados.status_geral === 'operacional';
+        banner.className = 'status-banner ' + (isTudoOk ? 'operacional' : 'instabilidade');
+        bannerDot.className = 'dot ' + (isTudoOk ? 'online' : 'offline');
+        bannerTexto.innerText = isTudoOk
+          ? 'Todos os sistemas estão operacionais'
+          : 'Instabilidade detectada em um ou mais sistemas';
+
+        container.innerHTML = dados.sistemas.map(criarCardSistema).join('');
+
+        if (dados.gerado_em) {
+          const d = new Date(dados.gerado_em);
+          ultAtualizacao.innerText = 'Última checagem: ' + d.toLocaleTimeString('pt-BR') + ' • Atualiza a cada 60 segundos';
+        }
+      } catch (err) {
+        console.error('Falha ao carregar status.json:', err);
+        banner.className = 'status-banner instabilidade';
+        bannerDot.className = 'dot offline';
+        bannerTexto.innerText = 'Não foi possível carregar o status atual';
+      }
+    }
+
+    // Carrega na abertura e agenda atualização a cada 60s
+    carregarStatus();
+    setInterval(carregarStatus, 60000);
+  </script>
+</body>
+</html>

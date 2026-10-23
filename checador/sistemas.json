@@ -1,0 +1,23 @@
+[
+  {
+    "id": "arateki-site",
+    "nome": "Site da Arateki",
+    "url": "https://arateki.com",
+    "espera_codigo": 200,
+    "espera_corpo": null
+  },
+  {
+    "id": "raiznet-site",
+    "nome": "Site da Raiznet",
+    "url": "https://raiznet.com",
+    "espera_codigo": 200,
+    "espera_corpo": null
+  },
+  {
+    "id": "keyflow-api",
+    "nome": "API do KeyFlow",
+    "url": "https://keyflow-api.arateki.com/health",
+    "espera_codigo": 200,
+    "espera_corpo": "ok"
+  }
+]
