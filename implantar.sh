@@ -86,9 +86,10 @@ OLD_UMASK=$(umask)
 umask 077
 PARAMS_FILE=$(mktemp /tmp/cf-params.XXXXXX.json)
 TMP_ZIP=$(mktemp /tmp/arateki-checador.XXXXXX.zip)
+INVOKE_OUTPUT=""
 umask "$OLD_UMASK"
 
-trap 'rm -f "$PARAMS_FILE" "$TMP_ZIP"' EXIT INT TERM
+trap 'rm -f "$PARAMS_FILE" "$TMP_ZIP" ${INVOKE_OUTPUT:+"$INVOKE_OUTPUT"}' EXIT INT TERM
 
 # Os valores vão pelo ambiente do processo (não pela linha de comando, que aparece no `ps`).
 BUCKET_NAME="$BUCKET_NAME" EMAIL1="$EMAIL1" EMAIL2="$EMAIL2" PARAMS_FILE="$PARAMS_FILE" \
@@ -142,12 +143,17 @@ echo "    Código da Lambda atualizado!"
 # 8. Publica a página web (index.html) no Cloudflare R2
 if [[ -n "$R2_ENDPOINT_URL" && -n "$R2_ACCESS_KEY_ID" && -n "$R2_SECRET_ACCESS_KEY" ]]; then
   echo "--> Publicando pagina/index.html no Cloudflare R2 ($BUCKET_NAME)..."
-  env -u AWS_PROFILE -u AWS_SESSION_TOKEN AWS_DEFAULT_REGION=auto AWS_REQUEST_CHECKSUM_CALCULATION=when_required \
-    AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+  (
+    unset AWS_PROFILE AWS_SESSION_TOKEN
+    export AWS_DEFAULT_REGION="auto"
+    export AWS_REQUEST_CHECKSUM_CALCULATION="when_required"
+    export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+    export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
     "$AWS_CLI" s3 cp pagina/index.html "s3://$BUCKET_NAME/index.html" \
-    --endpoint-url "$R2_ENDPOINT_URL" \
-    --content-type "text/html; charset=utf-8" \
-    --cache-control "public, max-age=300"
+      --endpoint-url "$R2_ENDPOINT_URL" \
+      --content-type "text/html; charset=utf-8" \
+      --cache-control "public, max-age=300"
+  )
   echo "    Página publicada com sucesso no R2!"
 else
   echo "AVISO: Credenciais de R2 não configuradas; upload de index.html pulado."
@@ -161,9 +167,25 @@ INVOKE_OUTPUT=$(mktemp /tmp/arateki-invoke.XXXXXX.json)
   --region "$REGIAO" \
   "$INVOKE_OUTPUT" >/dev/null || true
 if [[ -f "$INVOKE_OUTPUT" ]]; then
-  cat "$INVOKE_OUTPUT"
-  echo ""
+  python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if "body" in data:
+        body = json.loads(data["body"]) if isinstance(data["body"], str) else data["body"]
+        status = body.get("status_geral", "desconhecido")
+        checados = body.get("sistemas_checados", 0)
+        print(f"    Aquecimento concluído: status={status}, sistemas_checados={checados}")
+    elif "errorMessage" in data:
+        print("    Aviso: Falha na execução de aquecimento da Lambda")
+    else:
+        print("    Aquecimento executado.")
+except Exception:
+    print("    Aquecimento executado.")
+' "$INVOKE_OUTPUT" || true
   rm -f "$INVOKE_OUTPUT"
+  INVOKE_OUTPUT=""
 fi
 
 echo "=== Implantação concluída com sucesso! ==="
