@@ -3,12 +3,17 @@
 # implantar.sh — Script de implantação idempotente do Status da Arateki
 # ==============================================================================
 # Executa a implantação completa via AWS CloudFormation e publica o código e a página.
-# Não armazena nem commita segredos ou e-mails.
+# Credenciais e parâmetros sensíveis são lidos exclusivamente de variáveis de ambiente.
+#
+# Variáveis de ambiente esperadas:
+#   ALERT_EMAILS           (opcional, ex: "email1@exemplo.com,email2@exemplo.com")
+#   BUCKET_NAME            (opcional, padrão: "arateki-status")
+#   R2_ENDPOINT_URL        (obrigatório, ex: "https://<account_id>.r2.cloudflarestorage.com")
+#   R2_ACCESS_KEY_ID       (obrigatório, chave de acesso do Cloudflare R2)
+#   R2_SECRET_ACCESS_KEY   (obrigatório, segredo de acesso do Cloudflare R2)
 #
 # Uso:
-#   ./implantar.sh [--emails "admin@arateki.com,dev@arateki.com"] [--regiao us-east-2]
-#                  [--r2-endpoint "https://<id>.r2.cloudflarestorage.com"]
-#                  [--r2-key "KEY"] [--r2-secret "SECRET"] [--bucket "nome-do-bucket"]
+#   ./implantar.sh [--regiao us-east-2]
 # ==============================================================================
 
 set -euo pipefail
@@ -24,42 +29,25 @@ else
 fi
 
 STACK_NAME="arateki-status"
-REGIAO="${AWS_REGION:-us-east-2}"
+REGIAO="us-east-2"
 ALERT_EMAILS="${ALERT_EMAILS:-}"
 R2_ENDPOINT_URL="${R2_ENDPOINT_URL:-}"
 R2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:-}"
 R2_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY:-}"
-BUCKET_NAME="${BUCKET_NAME:-}"
+BUCKET_NAME="${BUCKET_NAME:-arateki-status}"
 
-# Processamento de argumentos
+# Processamento de argumentos (somente opções não sensíveis)
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --emails)
-      ALERT_EMAILS="$2"
-      shift 2
-      ;;
     --regiao)
       REGIAO="$2"
       shift 2
       ;;
-    --r2-endpoint)
-      R2_ENDPOINT_URL="$2"
-      shift 2
-      ;;
-    --r2-key)
-      R2_ACCESS_KEY_ID="$2"
-      shift 2
-      ;;
-    --r2-secret)
-      R2_SECRET_ACCESS_KEY="$2"
-      shift 2
-      ;;
-    --bucket)
-      BUCKET_NAME="$2"
-      shift 2
-      ;;
     --ajuda|-h)
-      echo "Uso: $0 [--emails 'email1,email2'] [--regiao us-east-2] [--r2-endpoint URL] [--r2-key KEY] [--r2-secret SECRET] [--bucket BUCKET]"
+      echo "Uso: $0 [--regiao us-east-2]"
+      echo ""
+      echo "Configure as variáveis de ambiente antes de executar:"
+      echo "  ALERT_EMAILS, BUCKET_NAME, R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY"
       exit 0
       ;;
     *)
@@ -75,6 +63,7 @@ cd "$SCRIPT_DIR"
 echo "=== Status da Arateki — Implantação ==="
 echo "Região: $REGIAO"
 echo "Stack:  $STACK_NAME"
+echo "Bucket: $BUCKET_NAME"
 
 # 2. Divide a lista de e-mails de alerta (suporta até 2 na CloudFormation)
 EMAIL1=""
@@ -92,38 +81,44 @@ echo "--> Validando template CloudFormation..."
   --template-body file://infra/template.yaml >/dev/null
 echo "    Template válido!"
 
-# 4. Monta parâmetros para o deploy
-PARAMS=()
-[[ -n "$EMAIL1" ]] && PARAMS+=("AlertEmail1=$EMAIL1")
-[[ -n "$EMAIL2" ]] && PARAMS+=("AlertEmail2=$EMAIL2")
-[[ -n "$BUCKET_NAME" ]] && PARAMS+=("BucketName=$BUCKET_NAME")
-[[ -n "$R2_ENDPOINT_URL" ]] && PARAMS+=("R2EndpointUrl=$R2_ENDPOINT_URL")
-[[ -n "$R2_ACCESS_KEY_ID" ]] && PARAMS+=("R2AccessKeyId=$R2_ACCESS_KEY_ID")
-[[ -n "$R2_SECRET_ACCESS_KEY" ]] && PARAMS+=("R2SecretAccessKey=$R2_SECRET_ACCESS_KEY")
+# 4. Cria arquivo JSON de parâmetros com umask restrita (077) e remoção segura via trap
+OLD_UMASK=$(umask)
+umask 077
+PARAMS_FILE=$(mktemp /tmp/cf-params.XXXXXX.json)
+TMP_ZIP=$(mktemp /tmp/arateki-checador.XXXXXX.zip)
+umask "$OLD_UMASK"
 
-# 5. Executa deploy da Stack CloudFormation
+trap 'rm -f "$PARAMS_FILE" "$TMP_ZIP"' EXIT INT TERM
+
+python3 -c "
+import json
+
+params = [
+    {'ParameterKey': 'BucketName', 'ParameterValue': '$BUCKET_NAME'},
+    {'ParameterKey': 'R2EndpointUrl', 'ParameterValue': '$R2_ENDPOINT_URL'},
+    {'ParameterKey': 'R2AccessKeyId', 'ParameterValue': '$R2_ACCESS_KEY_ID'},
+    {'ParameterKey': 'R2SecretAccessKey', 'ParameterValue': '$R2_SECRET_ACCESS_KEY'},
+    {'ParameterKey': 'AlertEmail1', 'ParameterValue': '$EMAIL1'},
+    {'ParameterKey': 'AlertEmail2', 'ParameterValue': '$EMAIL2'},
+]
+
+with open('$PARAMS_FILE', 'w', encoding='utf-8') as f:
+    json.dump(params, f)
+"
+
+# 5. Executa deploy da Stack CloudFormation usando arquivo de parâmetros
 echo "--> Executando CloudFormation deploy (idempotente)..."
-DEPLOY_CMD=(
-  "$AWS_CLI" cloudformation deploy
-  --template-file infra/template.yaml
-  --stack-name "$STACK_NAME"
-  --region "$REGIAO"
-  --capabilities CAPABILITY_NAMED_IAM
+"$AWS_CLI" cloudformation deploy \
+  --template-file infra/template.yaml \
+  --stack-name "$STACK_NAME" \
+  --region "$REGIAO" \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides "file://$PARAMS_FILE" \
   --no-fail-on-empty-changeset
-)
-
-if [[ ${#PARAMS[@]} -gt 0 ]]; then
-  DEPLOY_CMD+=(--parameter-overrides "${PARAMS[@]}")
-fi
-
-"${DEPLOY_CMD[@]}"
 echo "    Stack CloudFormation atualizada com sucesso!"
 
 # 6. Empacota o código da Lambda checadora
 echo "--> Empacotando código Python da Lambda..."
-TMP_ZIP="/tmp/arateki-status-checador.zip"
-rm -f "$TMP_ZIP"
-
 (
   cd "$SCRIPT_DIR"
   python3 -c "
@@ -137,7 +132,7 @@ with zipfile.ZipFile('$TMP_ZIP', 'w', zipfile.ZIP_DEFLATED) as z:
                 z.write(caminho)
 "
 )
-echo "    Pacote gerado em $TMP_ZIP ($(stat -c%s "$TMP_ZIP") bytes)."
+echo "    Pacote gerado ($(stat -c%s "$TMP_ZIP") bytes)."
 
 # 7. Atualiza o código da Lambda
 echo "--> Atualizando código da função Lambda arateki-status-checador..."
@@ -147,29 +142,22 @@ echo "--> Atualizando código da função Lambda arateki-status-checador..."
   --zip-file "fileb://$TMP_ZIP" >/dev/null
 echo "    Código da Lambda atualizado!"
 
-# 8. Publica a página web (index.html) no bucket
-echo "--> Obtendo bucket de armazenamento da stack..."
-BUCKET_RESOLVIDO="$BUCKET_NAME"
-if [[ -z "$BUCKET_RESOLVIDO" ]]; then
-  BUCKET_RESOLVIDO=$("$AWS_CLI" cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --region "$REGIAO" \
-    --query "Stacks[0].Outputs[?OutputKey=='StatusBucketName'].OutputValue" \
-    --output text)
-fi
-
-if [[ -n "$BUCKET_RESOLVIDO" && "$BUCKET_RESOLVIDO" != "None" ]]; then
-  echo "--> Publicando pagina/index.html no bucket $BUCKET_RESOLVIDO..."
-  "$AWS_CLI" s3 cp pagina/index.html "s3://$BUCKET_RESOLVIDO/index.html" \
-    --region "$REGIAO" \
+# 8. Publica a página web (index.html) no Cloudflare R2
+if [[ -n "$R2_ENDPOINT_URL" && -n "$R2_ACCESS_KEY_ID" && -n "$R2_SECRET_ACCESS_KEY" ]]; then
+  echo "--> Publicando pagina/index.html no Cloudflare R2 ($BUCKET_NAME)..."
+  env AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" -u AWS_PROFILE \
+    "$AWS_CLI" s3 cp pagina/index.html "s3://$BUCKET_NAME/index.html" \
+    --endpoint-url "$R2_ENDPOINT_URL" \
     --content-type "text/html; charset=utf-8" \
-    --cache-control "public, max-age=3600"
-  echo "    Página publicada com sucesso!"
+    --cache-control "public, max-age=300"
+  echo "    Página publicada com sucesso no R2!"
+else
+  echo "AVISO: Credenciais de R2 não configuradas; upload de index.html pulado."
 fi
 
-# 9. Executa a Lambda uma primeira vez para gerar o status.json inicial
+# 9. Executa a Lambda uma primeira vez para aquecimento e geração do status.json inicial
 echo "--> Executando primeira checagem de aquecimento na Lambda..."
-INVOKE_OUTPUT="/tmp/arateki-status-invoke.json"
+INVOKE_OUTPUT=$(mktemp /tmp/arateki-invoke.XXXXXX.json)
 "$AWS_CLI" lambda invoke \
   --function-name "arateki-status-checador" \
   --region "$REGIAO" \
@@ -179,8 +167,6 @@ if [[ -f "$INVOKE_OUTPUT" ]]; then
   echo ""
   rm -f "$INVOKE_OUTPUT"
 fi
-
-rm -f "$TMP_ZIP"
 
 echo "=== Implantação concluída com sucesso! ==="
 echo "Painel configurado para rodar automaticamente a cada 1 minuto."
