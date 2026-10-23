@@ -14,7 +14,7 @@ O sistema monitora os serviços da Arateki a cada 1 minuto, registra o históric
 |---|---|---|---|
 | **AWS Lambda** (arm64, 128 MB) | 43.200 invocações (~5.400 GB-s) | 1.000.000 invocações e 3.200.000 GB-s | **US$ 0,00** |
 | **EventBridge Scheduler** | 43.200 execuções (1/min) | 14.000.000 invocações | **US$ 0,00** |
-| **Amazon DynamoDB** (provisionado) | 1 RCU / 1 WCU, ~20 MB (TTL 90d) | 25 RCU / 25 WCU e 25 GB | **US$ 0,00** |
+| **Amazon DynamoDB** (provisionado) | 5 RCU / 5 WCU, ~25 MB (TTL 90d e 26h) | 25 RCU / 25 WCU e 25 GB | **US$ 0,00** |
 | **Amazon SNS** (alertas por e-mail) | < 50 notificações/mês | 100.000 publicações e 1.000 e-mails | **US$ 0,00** |
 | **CloudWatch Logs** (retenção 7d) | ~40 MB/mês | 5 GB de ingestão e armazenamento | **US$ 0,00** |
 | **Cloudflare** (DNS, CDN, WAF) | Ilimitado | Tráfego e mitigação DDoS não dosados | **US$ 0,00** |
@@ -25,6 +25,27 @@ O sistema monitora os serviços da Arateki a cada 1 minuto, registra o históric
 ### Custo no Pior Caso (Ataque de 100 milhões de requisições)
 Graças às regras de cache do Cloudflare (Edge TTL de 60 s para `status.json` e 300 s para `index.html` ignorando query strings), 100 milhões de acessos são absorvidos 100% na borda do Cloudflare a **US$ 0,00**.
 Mesmo se ocorresse bypass total da borda direto no **Cloudflare R2**: 10M leituras grátis + 90M × US$ 0,36/1M = **US$ 32,40** (com egress US$ 0,00 permanente).
+
+---
+
+### Dimensionamento e Capacidade do DynamoDB (KB por Minuto vs Capacidade)
+
+A tabela opera em modo provisionado com **5 RCU e 5 WCU** (dentro da franquia gratuita permanente de 25/25 na conta AWS):
+
+- **Capacidade provisionada:**
+  - 5 WCU = 5 escritas de 1 KB/s = **300 KB por minuto**.
+  - 5 RCU = 5 leituras de 4 KB/s = **1.200 KB por minuto** (ou 2.400 KB/min em leituras com consistência eventual).
+
+- **Volume real de escrita por minuto (3 sistemas vigiados):**
+  - **Item `STATE` compacto:** ~3 KB por sistema (mantém apenas status atual, contadores, histórico diário consolidado de 90 dias e últimas quedas; os 288 baldes de 5 min foram desacoplados) ➔ 3 × 3 WCU = **9 WCU/min** (~9 KB/min).
+  - **Item por hora `HOUR#YYYY-MM-DDTHH`:** ~0,8 KB por sistema (contém apenas os 12 baldes de 5 min da hora corrente, com TTL de 26 horas) ➔ 3 × 1 WCU = **3 WCU/min** (~2,4 KB/min).
+  - **Item `CHECK#...`:** ~0,3 KB por sistema (registro individual com TTL de 90 dias) ➔ 3 × 1 WCU = **3 WCU/min** (~0,9 KB/min).
+  - **Total de escrita:** **15 WCU/min** (~12,3 KB por minuto), representando apenas **5% da capacidade provisionada** (300 KB/min), com margem de segurança de 20x contra throttling.
+
+- **Volume de leitura por minuto:**
+  - Leituras fortemente consistentes de `STATE`: 3 × 3 KB = 9 KB (3 RCU).
+  - Consulta aos itens de hora das últimas 24h (`HOUR#...`, leitura eventual): ~18 KB por sistema = 54 KB (7 RCU).
+  - **Total de leitura:** **~10 RCU/min**, muito abaixo dos **1.200 KB/min disponíveis**.
 
 ---
 
