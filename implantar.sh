@@ -90,21 +90,18 @@ umask "$OLD_UMASK"
 
 trap 'rm -f "$PARAMS_FILE" "$TMP_ZIP"' EXIT INT TERM
 
-python3 -c "
-import json
-
-params = [
-    {'ParameterKey': 'BucketName', 'ParameterValue': '$BUCKET_NAME'},
-    {'ParameterKey': 'R2EndpointUrl', 'ParameterValue': '$R2_ENDPOINT_URL'},
-    {'ParameterKey': 'R2AccessKeyId', 'ParameterValue': '$R2_ACCESS_KEY_ID'},
-    {'ParameterKey': 'R2SecretAccessKey', 'ParameterValue': '$R2_SECRET_ACCESS_KEY'},
-    {'ParameterKey': 'AlertEmail1', 'ParameterValue': '$EMAIL1'},
-    {'ParameterKey': 'AlertEmail2', 'ParameterValue': '$EMAIL2'},
-]
-
-with open('$PARAMS_FILE', 'w', encoding='utf-8') as f:
+# Os valores vão pelo ambiente do processo (não pela linha de comando, que aparece no `ps`).
+BUCKET_NAME="$BUCKET_NAME" EMAIL1="$EMAIL1" EMAIL2="$EMAIL2" PARAMS_FILE="$PARAMS_FILE" \
+R2_ENDPOINT_URL="$R2_ENDPOINT_URL" R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+python3 - <<'PY'
+import json, os
+e = os.environ
+pares = (('BucketName', 'BUCKET_NAME'), ('R2EndpointUrl', 'R2_ENDPOINT_URL'), ('R2AccessKeyId', 'R2_ACCESS_KEY_ID'),
+         ('R2SecretAccessKey', 'R2_SECRET_ACCESS_KEY'), ('AlertEmail1', 'EMAIL1'), ('AlertEmail2', 'EMAIL2'))
+params = [{'ParameterKey': chave, 'ParameterValue': e.get(var, '')} for chave, var in pares]
+with open(e['PARAMS_FILE'], 'w', encoding='utf-8') as f:
     json.dump(params, f)
-"
+PY
 
 # 5. Executa deploy da Stack CloudFormation usando arquivo de parâmetros
 echo "--> Executando CloudFormation deploy (idempotente)..."
