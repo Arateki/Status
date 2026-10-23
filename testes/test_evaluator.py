@@ -231,6 +231,26 @@ class TestEvaluator(unittest.TestCase):
         self.assertIsNone(dia_vazio["pct"])
         self.assertEqual(dia_vazio["minutos_fora"], 0)
 
+    def test_virada_21h_0h_horario_brasilia(self):
+        """Entre 21h e 23h59 BRT (UTC-3), o dia NÃO pode avançar para a data UTC de amanhã."""
+        # 22:30 BRT em 23/10/2026 = 01:30 UTC em 24/10/2026
+        ts_22h30_brt = "2026-10-24T01:30:00Z"
+        hist = atualizar_historico_dias({}, ts_22h30_brt, ok=True)
+        self.assertIn("2026-10-23", hist, "22:30 BRT deve ser agrupado no dia 2026-10-23, não 2026-10-24")
+        self.assertNotIn("2026-10-24", hist)
+
+        dias = gerar_dias_90(hist, timestamp_referencia=ts_22h30_brt)
+        self.assertEqual(dias[-1]["data"], "2026-10-23", "O último segmento 'Hoje' deve ser 2026-10-23 às 22:30 BRT")
+
+        # 00:05 BRT em 24/10/2026 = 03:05 UTC em 24/10/2026 (virou o dia em BRT)
+        ts_00h05_brt = "2026-10-24T03:05:00Z"
+        hist2 = atualizar_historico_dias(hist, ts_00h05_brt, ok=True)
+        self.assertIn("2026-10-24", hist2, "Após meia-noite BRT deve registrar o novo dia")
+
+        dias2 = gerar_dias_90(hist2, timestamp_referencia=ts_00h05_brt)
+        self.assertEqual(dias2[-1]["data"], "2026-10-24", "O último segmento 'Hoje' agora é 2026-10-24")
+        self.assertEqual(dias2[-2]["data"], "2026-10-23", "O dia anterior é 2026-10-23")
+
 
 if __name__ == "__main__":
     unittest.main()

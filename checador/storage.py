@@ -269,7 +269,9 @@ def salvar_estado_e_checagem(
             if versao_esperada == 0:
                 put_kwargs["ConditionExpression"] = "attribute_not_exists(PK)"
             else:
-                put_kwargs["ConditionExpression"] = "attribute_not_exists(PK) OR versao = :v_esp"
+                put_kwargs["ConditionExpression"] = (
+                    "attribute_not_exists(PK) OR attribute_not_exists(versao) OR versao = :v_esp"
+                )
                 put_kwargs["ExpressionAttributeValues"] = {":v_esp": {"N": str(versao_esperada)}}
 
         dynamo_client.put_item(**put_kwargs)
@@ -307,10 +309,12 @@ def confirmar_alerta_enviado(
     estado: EstadoSistema,
     table_name: Optional[str] = None,
     dynamo_client: Optional[Any] = None,
+    max_tentativas: int = 3,
 ) -> bool:
     """Atualiza o DynamoDB após confirmação de entrega do alerta SNS.
 
     Atualiza ultimo_notificado, limpa alerta_pendente e incrementa versao.
+    Executa com retentativa curta para tolerância a falhas transitórias.
     """
     tabela = table_name or os.environ.get("TABLE_NAME", "arateki-status")
     if dynamo_client is None:
@@ -325,26 +329,40 @@ def confirmar_alerta_enviado(
     estado.versao = v_antiga + 1
     estado_json = json.dumps(estado.to_state_dict())
 
-    try:
-        dynamo_client.put_item(
-            TableName=tabela,
-            Item={
-                "PK": {"S": estado.sistema_id},
-                "SK": {"S": "STATE"},
-                "status": {"S": estado.status},
-                "falhas_consecutivas": {"N": str(estado.falhas_consecutivas)},
-                "ultimo_notificado": {"S": estado.ultimo_notificado},
-                "ultima_checagem": {"S": estado.ultima_checagem or ""},
-                "versao": {"N": str(estado.versao)},
-                "dados_json": {"S": estado_json},
-            },
-            ConditionExpression="attribute_not_exists(PK) OR versao = :v_ant",
-            ExpressionAttributeValues={":v_ant": {"N": str(v_antiga)}},
-        )
-        return True
-    except Exception as err:
-        logger.error("Erro ao confirmar entrega de alerta no DynamoDB para %s: %s", estado.sistema_id, err)
-        raise ErroGravacaoDynamoDB(f"Falha ao confirmar alerta de {estado.sistema_id}: {err}") from err
+    item = {
+        "PK": {"S": estado.sistema_id},
+        "SK": {"S": "STATE"},
+        "status": {"S": estado.status},
+        "falhas_consecutivas": {"N": str(estado.falhas_consecutivas)},
+        "ultimo_notificado": {"S": estado.ultimo_notificado},
+        "ultima_checagem": {"S": estado.ultima_checagem or ""},
+        "versao": {"N": str(estado.versao)},
+        "dados_json": {"S": estado_json},
+    }
+
+    ultimo_erro = None
+    for tentativa in range(max_tentativas):
+        try:
+            dynamo_client.put_item(
+                TableName=tabela,
+                Item=item,
+                ConditionExpression="attribute_not_exists(PK) OR attribute_not_exists(versao) OR versao = :v_ant",
+                ExpressionAttributeValues={":v_ant": {"N": str(v_antiga)}},
+            )
+            return True
+        except Exception as err:
+            ultimo_erro = err
+            logger.warning(
+                "Tentativa %d de confirmar alerta no DynamoDB para %s falhou: %s",
+                tentativa + 1,
+                estado.sistema_id,
+                err,
+            )
+            if tentativa < max_tentativas - 1:
+                time.sleep(0.05 * (2 ** tentativa))
+
+    logger.error("Erro ao confirmar entrega de alerta no DynamoDB para %s após %d tentativas: %s", estado.sistema_id, max_tentativas, ultimo_erro)
+    raise ErroGravacaoDynamoDB(f"Falha ao confirmar alerta de {estado.sistema_id}: {ultimo_erro}") from ultimo_erro
 
 
 def construir_status_json(

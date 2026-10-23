@@ -222,8 +222,28 @@ class TestStorageAndJson(unittest.TestCase):
 
         mock_client.put_item.assert_called_once()
         kwargs = mock_client.put_item.call_args.kwargs
-        self.assertEqual(kwargs["ConditionExpression"], "attribute_not_exists(PK) OR versao = :v_ant")
+        self.assertEqual(kwargs["ConditionExpression"], "attribute_not_exists(PK) OR attribute_not_exists(versao) OR versao = :v_ant")
         self.assertEqual(kwargs["ExpressionAttributeValues"][":v_ant"]["N"], "2")
+
+    def test_salvar_estado_item_legado_sem_versao(self):
+        """Itens antigos sem o atributo 'versao' devem ser aceitos pela condição para não bloquear a Lambda."""
+        mock_client = MagicMock()
+        estado = EstadoSistema(
+            sistema_id="arateki-site",
+            status="no_ar",
+            versao=1,
+        )
+        res_check = {"ok": True, "codigo_http": 200, "latencia_ms": 15, "timestamp": "2026-10-23T14:10:00Z"}
+
+        salvar_estado_e_checagem(estado, res_check, versao_esperada=1, dynamo_client=mock_client)
+
+        chamadas_put = mock_client.put_item.call_args_list
+        put_state = next(c for c in chamadas_put if c.kwargs["Item"]["SK"]["S"] == "STATE")
+        self.assertEqual(
+            put_state.kwargs["ConditionExpression"],
+            "attribute_not_exists(PK) OR attribute_not_exists(versao) OR versao = :v_esp",
+        )
+        self.assertEqual(put_state.kwargs["ExpressionAttributeValues"][":v_esp"]["N"], "1")
 
     def test_publicar_status_json_lanca_excecao_em_erro(self):
         """Falha no upload do status.json para o bucket lança ErroPublicacaoR2."""

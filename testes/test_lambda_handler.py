@@ -177,6 +177,103 @@ class TestLambdaHandler(unittest.TestCase):
         mock_confirmar_alerta.assert_not_called()
 
     @patch("checador.lambda_handler.publicar_status_json")
+    @patch("checador.lambda_handler.confirmar_alerta_enviado")
+    @patch("checador.lambda_handler.enviar_alerta_sns")
+    @patch("checador.lambda_handler.salvar_estado_e_checagem")
+    @patch("checador.lambda_handler.checar_todos")
+    @patch("checador.lambda_handler.carregar_baldes_24h")
+    @patch("checador.lambda_handler.carregar_estado_sistema")
+    def test_handler_sns_enviado_mas_confirmacao_dynamodb_falha_nao_reenvia_depois(
+        self,
+        mock_carregar_estado,
+        mock_carregar_baldes,
+        mock_checar_todos,
+        mock_salvar_estado,
+        mock_enviar_sns,
+        mock_confirmar_alerta,
+        mock_publicar_json,
+    ):
+        """Se o SNS foi enviado mas a confirmação no DynamoDB falhar, o handler tolera o erro sem quebrar."""
+        est_ant = EstadoSistema(sistema_id="arateki-site", status="no_ar", falhas_consecutivas=1, versao=2)
+        mock_carregar_estado.return_value = est_ant
+        mock_carregar_baldes.return_value = []
+        mock_checar_todos.return_value = [
+            ResultadoChecagem(
+                sistema_id="arateki-site",
+                nome="Site da Arateki",
+                url="https://arateki.com",
+                timestamp="2026-10-23T15:00:00Z",
+                ok=False,
+                codigo_http=500,
+                latencia_ms=100,
+                erro="HTTP 500",
+            )
+        ]
+        mock_salvar_estado.return_value = True
+        mock_enviar_sns.return_value = True
+        mock_confirmar_alerta.side_effect = ErroGravacaoDynamoDB("Falha transiente na confirmação")
+        mock_publicar_json.return_value = True
+
+        resp = handler({}, MagicMock())
+        self.assertEqual(resp["statusCode"], 200)
+        mock_enviar_sns.assert_called_once()
+        mock_confirmar_alerta.assert_called_once()
+
+    @patch("checador.lambda_handler.publicar_status_json")
+    @patch("checador.lambda_handler.confirmar_alerta_enviado")
+    @patch("checador.lambda_handler.enviar_alerta_sns")
+    @patch("checador.lambda_handler.salvar_estado_e_checagem")
+    @patch("checador.lambda_handler.checar_todos")
+    @patch("checador.lambda_handler.carregar_baldes_24h")
+    @patch("checador.lambda_handler.carregar_estado_sistema")
+    def test_handler_alerta_ja_enviado_idempotencia_pula_sns(
+        self,
+        mock_carregar_estado,
+        mock_carregar_baldes,
+        mock_checar_todos,
+        mock_salvar_estado,
+        mock_enviar_sns,
+        mock_confirmar_alerta,
+        mock_publicar_json,
+    ):
+        """Se o alerta pendente já foi enviado (flag enviado=True), não reenvia ao SNS."""
+        est_ant = EstadoSistema(
+            sistema_id="arateki-site",
+            status="fora_do_ar",
+            falhas_consecutivas=2,
+            versao=3,
+            alerta_pendente={
+                "acao": "queda",
+                "dados": {"sistema": "arateki-site"},
+                "enviado": True,
+                "alerta_id": "arateki-site#queda#123",
+            },
+            ultimo_alerta_id="arateki-site#queda#123",
+        )
+        mock_carregar_estado.return_value = est_ant
+        mock_carregar_baldes.return_value = []
+        mock_checar_todos.return_value = [
+            ResultadoChecagem(
+                sistema_id="arateki-site",
+                nome="Site da Arateki",
+                url="https://arateki.com",
+                timestamp="2026-10-23T15:05:00Z",
+                ok=False,
+                codigo_http=500,
+                latencia_ms=100,
+                erro="HTTP 500",
+            )
+        ]
+        mock_salvar_estado.return_value = True
+        mock_publicar_json.return_value = True
+
+        resp = handler({}, MagicMock())
+        self.assertEqual(resp["statusCode"], 200)
+        # Não reenvia ao SNS pois já constava como enviado
+        mock_enviar_sns.assert_not_called()
+        mock_confirmar_alerta.assert_called_once()
+
+    @patch("checador.lambda_handler.publicar_status_json")
     @patch("checador.lambda_handler.salvar_estado_e_checagem")
     @patch("checador.lambda_handler.checar_todos")
     @patch("checador.lambda_handler.carregar_baldes_24h")

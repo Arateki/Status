@@ -110,7 +110,6 @@ Resources:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
                   - dynamodb:Query
-                  - dynamodb:UpdateItem
                 Resource: !GetAtt DynamoDBTable.Arn
               - Effect: Allow
                 Action:

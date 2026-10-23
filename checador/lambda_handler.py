@@ -70,14 +70,42 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if alerta_para_enviar:
             acao_envio = alerta_para_enviar.get("acao", acao)
             dados_envio = alerta_para_enviar.get("dados", dados_alerta)
-            sucesso_sns = enviar_alerta_sns(acao_envio, dados_envio)
+            alerta_id = alerta_para_enviar.get("id")
+
+            # Idempotência: evita reenvio se o SNS já foi disparado com sucesso
+            ja_enviado = bool(
+                alerta_para_enviar.get("enviado")
+                or (alerta_id and est_ant and est_ant.ultimo_alerta_id == alerta_id)
+            )
+
+            if not ja_enviado:
+                sucesso_sns = enviar_alerta_sns(acao_envio, dados_envio)
+                if sucesso_sns:
+                    alerta_para_enviar["enviado"] = True
+                    if alerta_id:
+                        novo_est.ultimo_alerta_id = alerta_id
+            else:
+                sucesso_sns = True
+                logger.info(
+                    "Alerta %s para %s já enviado ao SNS anteriormente; pulando reenvio.",
+                    alerta_id,
+                    res.sistema_id,
+                )
+
             alertas_disparados.append({
                 "sistema": res.sistema_id,
                 "acao": acao_envio,
                 "enviado": sucesso_sns,
             })
             if sucesso_sns:
-                confirmar_alerta_enviado(novo_est)
+                try:
+                    confirmar_alerta_enviado(novo_est)
+                except ErroGravacaoDynamoDB as err:
+                    logger.error(
+                        "Falha ao confirmar alerta de %s no DynamoDB após envio SNS: %s",
+                        res.sistema_id,
+                        err,
+                    )
             else:
                 logger.warning(
                     "Envio de alerta SNS falhou para %s; alerta mantido como pendente.",

@@ -45,6 +45,10 @@ def _parse_iso(iso_str: str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+# Horário de Brasília / America/Fortaleza: UTC-3 fixo sem horário de verão
+FUSO_BRT = timezone(timedelta(hours=-3))
+
+
 @dataclass
 class EstadoSistema:
     sistema_id: str
@@ -60,6 +64,7 @@ class EstadoSistema:
     historico_dias: dict[str, dict[str, int]] = field(default_factory=dict)  # "YYYY-MM-DD": {"total": X, "ok": Y}
     versao: int = 1
     alerta_pendente: Optional[dict[str, Any]] = None
+    ultimo_alerta_id: Optional[str] = None
     verificacao_indisponivel: bool = False
 
     @classmethod
@@ -78,6 +83,7 @@ class EstadoSistema:
             historico_dias=dict(data.get("historico_dias", {})),
             versao=int(data.get("versao", 1)),
             alerta_pendente=data.get("alerta_pendente"),
+            ultimo_alerta_id=data.get("ultimo_alerta_id"),
             verificacao_indisponivel=bool(data.get("verificacao_indisponivel", False)),
         )
 
@@ -96,6 +102,7 @@ class EstadoSistema:
             "historico_dias": self.historico_dias,
             "versao": self.versao,
             "alerta_pendente": self.alerta_pendente,
+            "ultimo_alerta_id": self.ultimo_alerta_id,
             "verificacao_indisponivel": self.verificacao_indisponivel,
         }
 
@@ -106,13 +113,16 @@ class EstadoSistema:
         return d
 
     def registrar_alerta_enviado(self) -> None:
-        """Confirma a entrega do alerta pendente e sincroniza ultimo_notificado."""
+        """Confirma a entrega do alerta pendente e sincroniza ultimo_notificado e ultimo_alerta_id."""
         if self.alerta_pendente:
             acao = self.alerta_pendente.get("acao")
             if acao == ACAO_NOTIFICAR_QUEDA:
                 self.ultimo_notificado = "fora"
             elif acao == ACAO_NOTIFICAR_VOLTA:
                 self.ultimo_notificado = "no_ar"
+            alerta_id = self.alerta_pendente.get("id")
+            if alerta_id:
+                self.ultimo_alerta_id = alerta_id
             self.alerta_pendente = None
 
 
@@ -169,8 +179,8 @@ def atualizar_historico_dias(
     timestamp_iso: str,
     ok: bool,
 ) -> dict[str, dict[str, int]]:
-    """Atualiza agregados diários mantendo janela de 90 dias."""
-    dt = _parse_iso(timestamp_iso)
+    """Atualiza agregados diários mantendo janela de 90 dias no fuso de Brasília (UTC-3)."""
+    dt = _parse_iso(timestamp_iso).astimezone(FUSO_BRT)
     dia_chave = dt.strftime("%Y-%m-%d")
 
     novo_hist = {k: dict(v) for k, v in historico.items()}
@@ -191,7 +201,7 @@ def calcular_porcentagens(
     timestamp_referencia: Optional[str] = None,
 ) -> dict[str, float]:
     """Calcula disponibilidade percentual em 24h, 7d, 30d e 90d."""
-    ref_dt = _parse_iso(timestamp_referencia) if timestamp_referencia else datetime.now(timezone.utc)
+    ref_dt = (_parse_iso(timestamp_referencia) if timestamp_referencia else datetime.now(timezone.utc)).astimezone(FUSO_BRT)
 
     # 24 Horas: calculado a partir dos baldes das últimas 24h
     if baldes_24h:
@@ -202,7 +212,7 @@ def calcular_porcentagens(
         pct_24h = 100.0
 
     def calc_janela_dias(dias: int) -> float:
-        # Janela de N dias inclui hoje mais os (N-1) dias anteriores
+        # Janela de N dias inclui hoje mais os (N-1) dias anteriores no fuso BRT
         limite = (ref_dt - timedelta(days=max(0, dias - 1))).strftime("%Y-%m-%d")
         total = 0
         total_ok = 0
@@ -227,7 +237,7 @@ def gerar_dias_90(
     timestamp_referencia: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Gera a lista contínua dos últimos 90 dias com percentual, minutos fora e status para a barra de 90 segmentos."""
-    ref_dt = _parse_iso(timestamp_referencia) if timestamp_referencia else datetime.now(timezone.utc)
+    ref_dt = (_parse_iso(timestamp_referencia) if timestamp_referencia else datetime.now(timezone.utc)).astimezone(FUSO_BRT)
     hoje = ref_dt.date()
 
     dias_lista: list[dict[str, Any]] = []
@@ -344,8 +354,10 @@ def avaliar_checagem(
 
             # Dispara alerta de volta se já tinha notificado a queda
             if estado.ultimo_notificado == "fora":
+                alerta_id = f"{resultado.sistema_id}#volta#{resultado.timestamp}"
                 dados_volta = {
                     "sistema_id": resultado.sistema_id,
+                    "alerta_id": alerta_id,
                     "nome": resultado.nome,
                     "url": resultado.url,
                     "inicio": inicio_str,
@@ -353,9 +365,11 @@ def avaliar_checagem(
                     "duracao_texto": formatar_duracao(duracao_seg),
                 }
                 estado.alerta_pendente = {
+                    "id": alerta_id,
                     "acao": ACAO_NOTIFICAR_VOLTA,
                     "dados": dados_volta,
                     "criado_em": resultado.timestamp,
+                    "enviado": False,
                 }
                 # Não altera ultimo_notificado aqui; só é atualizado após persistência e envio
                 return estado, ACAO_NOTIFICAR_VOLTA, dados_volta
@@ -384,8 +398,10 @@ def avaliar_checagem(
 
             # Se ainda não notificou queda, prepara alerta pendente
             if estado.ultimo_notificado != "fora":
+                alerta_id = f"{resultado.sistema_id}#queda#{resultado.timestamp}"
                 dados_queda = {
                     "sistema_id": resultado.sistema_id,
+                    "alerta_id": alerta_id,
                     "nome": resultado.nome,
                     "url": resultado.url,
                     "inicio": resultado.timestamp,
@@ -393,9 +409,11 @@ def avaliar_checagem(
                     "codigo_http": resultado.codigo_http,
                 }
                 estado.alerta_pendente = {
+                    "id": alerta_id,
                     "acao": ACAO_NOTIFICAR_QUEDA,
                     "dados": dados_queda,
                     "criado_em": resultado.timestamp,
+                    "enviado": False,
                 }
                 # Não altera ultimo_notificado aqui; só é atualizado após persistência e envio
                 return estado, ACAO_NOTIFICAR_QUEDA, dados_queda

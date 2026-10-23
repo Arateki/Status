@@ -38,34 +38,38 @@ def enviar_alerta_sns(
 
     nome = dados.get("nome", dados.get("sistema_id", "Sistema"))
     url = dados.get("url", "")
+    alerta_id = dados.get("alerta_id") or dados.get("id") or ""
+    alerta_tag = f" [{alerta_id}]" if alerta_id else ""
 
     if acao == "notificar_queda":
-        assunto = f"[ALERTA] {nome} está FORA DO AR"
+        assunto = f"[ALERTA{alerta_tag}] {nome} está FORA DO AR"
         motivo = dados.get("motivo", "Falha de resposta")
         codigo = dados.get("codigo_http")
         inicio = dados.get("inicio", "")
 
         codigo_linha = f"\nCódigo HTTP: {codigo}" if codigo else ""
+        id_linha = f"\nID do Alerta: {alerta_id}" if alerta_id else ""
         mensagem = (
             f"Alerta de Queda — Status da Arateki\n\n"
             f"Sistema: {nome}\n"
             f"URL: {url}\n"
-            f"Status: FORA DO AR (2 falhas consecutivas)\n"
+            f"Status: FORA DO AR (2 falhas consecutivas){id_linha}\n"
             f"Início: {inicio}\n"
             f"Motivo: {motivo}{codigo_linha}\n\n"
             f"Painel público: https://status.arateki.com\n"
         )
     elif acao == "notificar_volta":
-        assunto = f"[RECUPERADO] {nome} voltou ao ar"
+        assunto = f"[RECUPERADO{alerta_tag}] {nome} voltou ao ar"
         inicio = dados.get("inicio", "")
         fim = dados.get("fim", "")
         duracao = dados.get("duracao_texto", "")
 
+        id_linha = f"\nID do Alerta: {alerta_id}" if alerta_id else ""
         mensagem = (
             f"Alerta de Recuperação — Status da Arateki\n\n"
             f"Sistema: {nome}\n"
             f"URL: {url}\n"
-            f"Status: OPERACIONAL (recuperado com 1 checagem ok)\n"
+            f"Status: OPERACIONAL (recuperado com 1 checagem ok){id_linha}\n"
             f"Início da queda: {inicio}\n"
             f"Volta confirmada: {fim}\n"
             f"Duração total fora do ar: {duracao}\n\n"
