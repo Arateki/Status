@@ -222,6 +222,51 @@ def calcular_porcentagens(
     }
 
 
+def gerar_dias_90(
+    historico_dias: dict[str, dict[str, int]],
+    timestamp_referencia: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """Gera a lista contínua dos últimos 90 dias com percentual, minutos fora e status para a barra de 90 segmentos."""
+    ref_dt = _parse_iso(timestamp_referencia) if timestamp_referencia else datetime.now(timezone.utc)
+    hoje = ref_dt.date()
+
+    dias_lista: list[dict[str, Any]] = []
+    # De 89 dias atrás até hoje (total de 90 dias cronológicos)
+    for i in range(89, -1, -1):
+        dia_dt = hoje - timedelta(days=i)
+        dia_str = dia_dt.strftime("%Y-%m-%d")
+        cont = historico_dias.get(dia_str)
+
+        if not cont or cont.get("total", 0) == 0:
+            dias_lista.append({
+                "data": dia_str,
+                "pct": None,
+                "minutos_fora": 0,
+                "status": "sem_dados",
+            })
+        else:
+            total = cont["total"]
+            ok = cont.get("ok", 0)
+            minutos_fora = max(0, total - ok)
+            pct = round((ok / total) * 100.0, 2)
+
+            if ok == total:
+                status_dia = "verde"
+            elif pct >= 95.0:
+                status_dia = "parcial"
+            else:
+                status_dia = "queda"
+
+            dias_lista.append({
+                "data": dia_str,
+                "pct": pct,
+                "minutos_fora": minutos_fora,
+                "status": status_dia,
+            })
+
+    return dias_lista
+
+
 def avaliar_checagem(
     estado_anterior: Optional[EstadoSistema],
     resultado: ResultadoChecagem,

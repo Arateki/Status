@@ -71,6 +71,10 @@ class TestStorageAndJson(unittest.TestCase):
         self.assertEqual(s1["status"], "no_ar")
         self.assertEqual(s1["latencia_ms"], 35)
         self.assertEqual(s1["disponibilidade"]["h24"], 100.0)
+        self.assertIn("dias_90", s1, "Deve incluir agregado diário de 90 dias")
+        self.assertEqual(len(s1["dias_90"]), 90)
+        self.assertEqual(s1["dias_90"][-1]["data"], "2026-10-23")
+        self.assertEqual(s1["dias_90"][-1]["status"], "verde")
 
         s2 = status_json["sistemas"][1]
         self.assertEqual(s2["id"], "raiznet-site")

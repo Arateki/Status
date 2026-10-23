@@ -7,7 +7,7 @@ import os
 import time
 from typing import Any, Optional
 
-from .evaluator import EstadoSistema, _parse_iso, calcular_porcentagens
+from .evaluator import EstadoSistema, _parse_iso, calcular_porcentagens, gerar_dias_90
 
 logger = logging.getLogger(__name__)
 
@@ -382,6 +382,8 @@ def construir_status_json(
             for b in estado.baldes_24h
         ]
 
+        dias_90 = gerar_dias_90(estado.historico_dias, timestamp_referencia=timestamp)
+
         lista_sistemas.append({
             "id": sid,
             "nome": cfg.get("nome", sid),
@@ -393,6 +395,7 @@ def construir_status_json(
             "codigo_http": estado.ultimo_codigo_http,
             "disponibilidade": pcts,
             "baldes_24h": baldes_formatados,
+            "dias_90": dias_90,
             "quedas_recentes": estado.quedas_recentes,
         })
 

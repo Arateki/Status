@@ -14,6 +14,7 @@ from checador.evaluator import (
     avaliar_checagem,
     calcular_porcentagens,
     formatar_duracao,
+    gerar_dias_90,
 )
 
 
@@ -191,6 +192,44 @@ class TestEvaluator(unittest.TestCase):
         self.assertEqual(formatar_duracao(3720), "1h 2m")
         self.assertEqual(formatar_duracao(86400), "1d")
         self.assertEqual(formatar_duracao(90000), "1d 1h")
+
+    def test_gerar_dias_90_segmentos_e_status(self):
+        """Valida que gerar_dias_90 gera exatamente 90 dias contínuos e classifica status corretamente."""
+        ref_dt = datetime(2026, 10, 23, 12, 0, 0, tzinfo=timezone.utc)
+        ref_iso = ref_dt.isoformat()
+
+        historico = {
+            # Hoje: 100% verde (1440 checks, 1440 ok)
+            "2026-10-23": {"total": 1440, "ok": 1440},
+            # Ontem: 98% parcial (100 total, 98 ok -> 2 min fora)
+            "2026-10-22": {"total": 100, "ok": 98},
+            # Anteontem: 80% queda relevante (100 total, 80 ok -> 20 min fora)
+            "2026-10-21": {"total": 100, "ok": 80},
+        }
+
+        dias = gerar_dias_90(historico, timestamp_referencia=ref_iso)
+
+        self.assertEqual(len(dias), 90, "Deve gerar exatamente 90 segmentos de dias")
+        self.assertEqual(dias[-1]["data"], "2026-10-23")
+        self.assertEqual(dias[-1]["status"], "verde")
+        self.assertEqual(dias[-1]["pct"], 100.0)
+        self.assertEqual(dias[-1]["minutos_fora"], 0)
+
+        self.assertEqual(dias[-2]["data"], "2026-10-22")
+        self.assertEqual(dias[-2]["status"], "parcial")
+        self.assertEqual(dias[-2]["pct"], 98.0)
+        self.assertEqual(dias[-2]["minutos_fora"], 2)
+
+        self.assertEqual(dias[-3]["data"], "2026-10-21")
+        self.assertEqual(dias[-3]["status"], "queda")
+        self.assertEqual(dias[-3]["pct"], 80.0)
+        self.assertEqual(dias[-3]["minutos_fora"], 20)
+
+        # Dia sem dados (80 dias atrás)
+        dia_vazio = dias[10]
+        self.assertEqual(dia_vazio["status"], "sem_dados")
+        self.assertIsNone(dia_vazio["pct"])
+        self.assertEqual(dia_vazio["minutos_fora"], 0)
 
 
 if __name__ == "__main__":
