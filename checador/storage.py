@@ -41,6 +41,8 @@ def obter_cliente_s3(
     kwargs: dict[str, Any] = {}
     if ep:
         kwargs["endpoint_url"] = ep
+        # O R2 só aceita a região "auto"; sem isto o boto3 usa a região da Lambda e o PutObject falha.
+        kwargs["region_name"] = "auto"
     if key and secret:
         kwargs["aws_access_key_id"] = key
         kwargs["aws_secret_access_key"] = secret

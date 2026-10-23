@@ -145,3 +145,16 @@ class TestStorageAndJson(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestClienteR2(unittest.TestCase):
+    def test_cliente_r2_usa_regiao_auto(self):
+        import sys
+        from unittest import mock
+        falso = mock.MagicMock()
+        with mock.patch.dict(sys.modules, {"boto3": falso}):
+            from checador.storage import obter_cliente_s3
+            obter_cliente_s3("https://conta.r2.cloudflarestorage.com", "id", "segredo")
+        _, kwargs = falso.client.call_args
+        self.assertEqual(kwargs["region_name"], "auto")
+        self.assertEqual(kwargs["endpoint_url"], "https://conta.r2.cloudflarestorage.com")
