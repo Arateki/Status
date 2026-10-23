@@ -38,6 +38,18 @@ class TestPagina(unittest.TestCase):
         self.assertNotIn("<script>", escapado)
         self.assertIn("&lt;script&gt;", escapado)
 
+    def test_alerta_dados_desatualizados_mais_de_cinco_minutos(self):
+        """A página deve detectar quando os dados têm mais de 5 min e alertar o usuário."""
+        self.assertIn("dadosDesatualizados", self.conteudo)
+        self.assertIn("Dados desatualizados", self.conteudo)
+        self.assertIn("5 * 60 * 1000", self.conteudo)
+
+    def test_classe_e_badge_verificacao_indisponivel(self):
+        """A página deve estilizar e indicar 'Verificação indisponível' quando o checador for bloqueado."""
+        self.assertIn("Verificação indisponível", self.conteudo)
+        self.assertIn(".card-badge.indisponivel", self.conteudo)
+        self.assertIn(".dot.indisponivel", self.conteudo)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -143,6 +143,11 @@
       box-shadow: 0 0 8px var(--vermelho);
     }
 
+    .dot.indisponivel {
+      background: var(--amarelo);
+      box-shadow: 0 0 8px var(--amarelo);
+    }
+
     .cards-grid {
       display: flex;
       flex-direction: column;
@@ -200,6 +205,12 @@
     .card-badge.offline {
       background: var(--vermelho-bg);
       color: var(--vermelho);
+    }
+
+    .card-badge.indisponivel {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--amarelo);
+      border: 1px solid var(--amarelo);
     }
 
     .latency-info {
@@ -468,9 +479,17 @@
     }
 
     function criarCardSistema(sis) {
-      const isOnline = sis.status === 'no_ar';
-      const badgeClasse = isOnline ? 'online' : 'offline';
-      const badgeTexto = isOnline ? 'Operacional' : 'Fora do ar';
+      const isIndisponivel = sis.status === 'indisponivel' || Boolean(sis.verificacao_indisponivel);
+      const isOnline = sis.status === 'no_ar' && !isIndisponivel;
+      let badgeClasse = 'offline';
+      let badgeTexto = 'Fora do ar';
+      if (isIndisponivel) {
+        badgeClasse = 'indisponivel';
+        badgeTexto = 'Verificação indisponível';
+      } else if (isOnline) {
+        badgeClasse = 'online';
+        badgeTexto = 'Operacional';
+      }
       const latenciaTexto = sis.latencia_ms !== null && sis.latencia_ms !== undefined
         ? `${sis.latencia_ms} ms`
         : '-';
@@ -556,18 +575,33 @@
         }
         const dados = await resp.json();
 
-        const isTudoOk = dados.status_geral === 'operacional';
-        banner.className = 'status-banner ' + (isTudoOk ? 'operacional' : 'instabilidade');
-        bannerDot.className = 'dot ' + (isTudoOk ? 'online' : 'offline');
-        bannerTexto.innerText = isTudoOk
-          ? 'Todos os sistemas estão operacionais'
-          : 'Instabilidade detectada em um ou mais sistemas';
+        const agoraMs = Date.now();
+        const geradoMs = dados.gerado_em ? new Date(dados.gerado_em).getTime() : 0;
+        const diferencaMs = agoraMs - geradoMs;
+        const dadosDesatualizados = !geradoMs || isNaN(geradoMs) || diferencaMs > (5 * 60 * 1000);
+
+        if (dadosDesatualizados) {
+          banner.className = 'status-banner instabilidade';
+          bannerDot.className = 'dot offline';
+          bannerTexto.innerText = 'Dados desatualizados — última checagem há mais de 5 minutos';
+        } else {
+          const isTudoOk = dados.status_geral === 'operacional';
+          banner.className = 'status-banner ' + (isTudoOk ? 'operacional' : 'instabilidade');
+          bannerDot.className = 'dot ' + (isTudoOk ? 'online' : 'offline');
+          bannerTexto.innerText = isTudoOk
+            ? 'Todos os sistemas estão operacionais'
+            : 'Instabilidade detectada em um ou mais sistemas';
+        }
 
         container.innerHTML = dados.sistemas.map(criarCardSistema).join('');
 
         if (dados.gerado_em) {
           const d = new Date(dados.gerado_em);
-          ultAtualizacao.innerText = 'Última checagem: ' + d.toLocaleTimeString('pt-BR') + ' • Atualiza a cada 60 segundos';
+          if (dadosDesatualizados) {
+            ultAtualizacao.innerText = 'Última checagem: ' + d.toLocaleTimeString('pt-BR') + ' (dados desatualizados • mais de 5 min atrás)';
+          } else {
+            ultAtualizacao.innerText = 'Última checagem: ' + d.toLocaleTimeString('pt-BR') + ' • Atualiza a cada 60 segundos';
+          }
         }
       } catch (err) {
         console.error('Falha ao carregar status.json:', err);
